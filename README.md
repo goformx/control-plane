@@ -16,7 +16,7 @@ composer check
 composer dev
 ```
 
-The application is served at `http://127.0.0.1:8080` by default. Local secrets are generated in `.env`; the file and SQLite database are ignored.
+The application is served at `http://127.0.0.1:8080` by default. Local secrets are generated in `.env`; the file and SQLite database are ignored. The development fallback account is disabled by default and must never be enabled in a deployed environment.
 
 ## Architecture
 
@@ -26,6 +26,8 @@ The application is served at `http://127.0.0.1:8080` by default. Local secrets a
 - [Development and deployment](docs/development.md)
 
 The canonical product capability declaration is [.waaseyaa/site.yaml](.waaseyaa/site.yaml). The provider-neutral release gate is `composer check`; GitHub Actions is only an adapter for that command.
+
+Delivery is coordinated from [GoFormX roadmap issue #84](https://github.com/goformx/goformx/issues/84), including the [Waaseyaa control-plane foundation milestone](https://github.com/goformx/goformx/milestone/7).
 
 ## License
 
