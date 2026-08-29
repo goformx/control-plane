@@ -11,7 +11,9 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     env:
-      APP_ENV: test
+      # Bootstrap commands intentionally run in local mode against an ephemeral
+      # CI database; production mode requires an already activated config generation.
+      APP_ENV: local
       APP_URL: https://goformx.test
       WAASEYAA_APP_SECRET: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       WAASEYAA_JWT_SECRET: ci-only-not-a-production-secret
