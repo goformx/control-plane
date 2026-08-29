@@ -5,9 +5,18 @@ declare(strict_types=1);
 namespace App\Provider;
 
 use App\Controller\AuthPageController;
+use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
+use App\Controller\ManagementFormsController;
 use App\Controller\OrganizationContextController;
+use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationMembershipService;
+use App\Domain\Organization\OrganizationRequestContextResolverInterface;
+use App\Infrastructure\GoFormX\FirstPartyAssertionIssuer;
+use App\Infrastructure\GoFormX\JwksDocument;
+use App\Infrastructure\GoFormX\ManagementApiClient;
+use App\Infrastructure\GoFormX\ManagementApiClientInterface;
+use App\Infrastructure\GoFormX\SigningKey;
 use App\Entity\Organization;
 use App\Entity\OrganizationMembership;
 use Symfony\Component\HttpFoundation\Request;
@@ -17,6 +26,7 @@ use Waaseyaa\Entity\EntityType;
 use Waaseyaa\Entity\EntityTypeManager;
 use Waaseyaa\Foundation\Diagnostic\CleanUrlProbe;
 use Waaseyaa\Foundation\ServiceProvider\ServiceProvider;
+use Waaseyaa\HttpClient\StreamHttpClient;
 use Waaseyaa\Routing\RouteBuilder;
 use Waaseyaa\Routing\WaaseyaaRouter;
 
@@ -30,10 +40,44 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(OrganizationMembershipService::class, fn() => new OrganizationMembershipService(
             $this->resolve(EntityTypeManager::class),
         ));
-        $this->singleton(OrganizationContextController::class, fn() => new OrganizationContextController(
+        $this->singleton(AuthenticatedOrganizationResolver::class, fn() => new AuthenticatedOrganizationResolver(
             $this->resolve(OrganizationMembershipService::class),
             $this->resolve(EntityTypeManager::class),
             $this->resolve(UserInternalFieldReaderInterface::class),
+        ));
+        $this->singleton(OrganizationRequestContextResolverInterface::class, fn() => $this->resolve(
+            AuthenticatedOrganizationResolver::class,
+        ));
+        $this->singleton(OrganizationContextController::class, fn() => new OrganizationContextController(
+            $this->resolve(OrganizationMembershipService::class),
+            $this->resolve(EntityTypeManager::class),
+            $this->resolve(AuthenticatedOrganizationResolver::class),
+        ));
+        $this->singleton(SigningKey::class, fn() => SigningKey::fromBase64Seed(
+            (string) ($this->config['goformx']['first_party']['key_id'] ?? ''),
+            (string) ($this->config['goformx']['first_party']['signing_seed'] ?? ''),
+        ));
+        $this->singleton(JwksDocument::class, fn() => JwksDocument::fromConfiguration(
+            $this->resolve(SigningKey::class),
+            (string) ($this->config['goformx']['first_party']['additional_jwks'] ?? '[]'),
+        ));
+        $this->singleton(FirstPartyAssertionIssuer::class, fn() => new FirstPartyAssertionIssuer(
+            (string) ($this->config['goformx']['first_party']['issuer'] ?? ''),
+            (string) ($this->config['goformx']['first_party']['audience'] ?? ''),
+            $this->resolve(SigningKey::class),
+        ));
+        $this->singleton(ManagementApiClient::class, fn() => new ManagementApiClient(
+            (string) ($this->config['goformx']['api_url'] ?? ''),
+            $this->resolve(FirstPartyAssertionIssuer::class),
+            new StreamHttpClient(timeout: 10.0, maxResponseBytes: 8 * 1024 * 1024),
+        ));
+        $this->singleton(ManagementApiClientInterface::class, fn() => $this->resolve(ManagementApiClient::class));
+        $this->singleton(ManagementFormsController::class, fn() => new ManagementFormsController(
+            $this->resolve(OrganizationRequestContextResolverInterface::class),
+            $this->resolve(ManagementApiClientInterface::class),
+        ));
+        $this->singleton(FirstPartyJwksController::class, fn() => new FirstPartyJwksController(
+            fn(): JwksDocument => $this->resolve(JwksDocument::class),
         ));
     }
 
@@ -65,9 +109,26 @@ final class AppServiceProvider extends ServiceProvider
         }
 
         $router->addRoute(
+            'goformx.first_party_jwks',
+            RouteBuilder::create('/.well-known/goformx-control-plane-jwks.json')
+                ->controller(fn() => $this->resolve(FirstPartyJwksController::class)->show())
+                ->allowAll()
+                ->methods('GET')
+                ->build(),
+        );
+
+        $router->addRoute(
             'goformx.context.show',
             RouteBuilder::create('/api/control-plane/context')
                 ->controller(fn(Request $request) => $this->resolve(OrganizationContextController::class)->show($request))
+                ->requireAuthentication()
+                ->methods('GET')
+                ->build(),
+        );
+        $router->addRoute(
+            'goformx.management.forms.list',
+            RouteBuilder::create('/api/control-plane/forms')
+                ->controller(fn(Request $request) => $this->resolve(ManagementFormsController::class)->list($request))
                 ->requireAuthentication()
                 ->methods('GET')
                 ->build(),

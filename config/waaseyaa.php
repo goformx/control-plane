@@ -15,6 +15,13 @@ return [
     // Override with APP_ENV env var. Values: local, dev, development, staging, production.
     'environment' => getenv('APP_ENV') ?: 'production',
 
+    // Anonymous verification-key discovery must never create a session. This
+    // keeps the JWKS response cookie-free and eligible for shared caching;
+    // requests carrying an existing session cookie still resume normally.
+    'session' => [
+        'stateless_paths' => ['/.well-known/goformx-control-plane-jwks.json'],
+    ],
+
     // RFC 9727 API Catalog. The public route exists only when a canonical
     // HTTPS base URL and at least one installed public API contribution exist.
     // APP_URL is never inferred from the request Host header.
@@ -64,6 +71,20 @@ return [
         'sendgrid_api_key' => getenv('SENDGRID_API_KEY') ?: '',
         'from_address' => getenv('GOFORMX_MAIL_FROM_ADDRESS') ?: '',
         'from_name' => getenv('GOFORMX_MAIL_FROM_NAME') ?: 'GoFormX',
+    ],
+
+    // Server-only GoFormX management boundary. The signing seed is 32 random
+    // bytes encoded as base64 and must remain in deployment secret custody.
+    'goformx' => [
+        'api_url' => getenv('GOFORMX_API_URL') ?: '',
+        'first_party' => [
+            'issuer' => getenv('GOFORMX_ASSERTION_ISSUER') ?: (getenv('APP_URL') ?: ''),
+            'audience' => getenv('GOFORMX_ASSERTION_AUDIENCE') ?: (getenv('GOFORMX_API_URL') ?: ''),
+            'key_id' => getenv('GOFORMX_ASSERTION_KEY_ID') ?: '',
+            'signing_seed' => getenv('GOFORMX_ASSERTION_SIGNING_SEED') ?: '',
+            // JSON array of public JWKs in next/retiring/revoked state.
+            'additional_jwks' => getenv('GOFORMX_ASSERTION_ADDITIONAL_JWKS') ?: '[]',
+        ],
     ],
 
     // Bearer auth settings for machine clients.

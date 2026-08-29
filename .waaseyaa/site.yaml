@@ -29,7 +29,7 @@
     "canonical_route": "/app"
     "id": "dashboard"
 "framework":
-  "observed_lock_sha256": "999ce20029c04cae75192f9c3a8747024c6def4f3cb304553eede07f09172e0c"
+  "observed_lock_sha256": "0abd2e9d864afb47f4ade693855a4c2955304c5f2f4e57c38dee26170f742386"
   "revision_policy": "exact-lock"
 "generator_version": 1
 "personal_data_stores": {  }
