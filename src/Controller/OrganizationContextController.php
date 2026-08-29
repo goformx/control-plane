@@ -11,13 +11,11 @@ use App\Domain\Organization\OrganizationMembershipService;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Waaseyaa\Entity\EntityTypeManagerInterface;
 
 final class OrganizationContextController
 {
     public function __construct(
         private readonly OrganizationMembershipService $memberships,
-        private readonly EntityTypeManagerInterface $entityTypeManager,
         private readonly OrganizationRequestContextResolverInterface $resolver,
     ) {}
 
@@ -78,8 +76,7 @@ final class OrganizationContextController
         try {
             $this->assertCsrf($request);
             $account = $this->resolver->account($request);
-            $this->memberships->revokeForAccountDeletion($account->userId);
-            $this->entityTypeManager->getRepository('user')->delete($account->entity);
+            $this->memberships->deleteAccount($account->userId, $account->entity);
 
             $request->getSession()->clear();
             $request->getSession()->migrate(true);

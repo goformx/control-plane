@@ -62,7 +62,6 @@ final class OrganizationContextControllerTest extends TestCase
 
         return new OrganizationContextController(
             new OrganizationMembershipService($manager),
-            $manager,
             new AuthenticatedOrganizationResolver(
                 new OrganizationMembershipService($manager),
                 $manager,

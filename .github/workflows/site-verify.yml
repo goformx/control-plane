@@ -22,9 +22,15 @@ jobs:
       - uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.5'
-          extensions: pdo_sqlite, sqlite3, mbstring, xml
+          extensions: pdo_sqlite, sqlite3, sodium, mbstring, xml
           coverage: none
       - run: composer install --no-interaction --prefer-dist
-      - run: php vendor/bin/waaseyaa migrate
-      - run: php vendor/bin/waaseyaa schema:sync
+      - run: composer validate --strict
+      - run: composer audit --no-interaction
+      - run: php vendor/bin/waaseyaa install:init
+      - name: Lint application PHP
+        run: |
+          find config src tests bin/maintenance -type f -name '*.php' -print0 | xargs -0 -n1 php -l
+          php -l bin/maintenance/goformx-generate-signing-key
+      - run: php vendor/bin/phpunit --no-coverage
       - run: .ci/site-verify
