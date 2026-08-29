@@ -4,12 +4,14 @@
     "type": "project",
     "license": "GPL-2.0-or-later",
     "require": {
+        "php": ">=8.5",
+        "ext-fileinfo": "*",
         "ext-pdo_sqlite": "*",
         "ext-sodium": "*",
         "ext-sqlite3": "*",
-        "php": ">=8.5",
+        "ext-zip": "*",
         "symfony/dotenv": "^8.0",
-        "waaseyaa/framework": "^0.1.0-alpha.298"
+        "waaseyaa/framework": "0.1.0-alpha.299"
     },
     "autoload": {
         "psr-4": {
