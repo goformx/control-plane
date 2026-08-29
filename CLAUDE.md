@@ -92,19 +92,16 @@ final class SendWelcomeEmail extends Job
 $queue->dispatch(new SendWelcomeEmail($userId));
 ```
 
-## Orchestration Table
+## GoFormX application contract
 
-<!-- Map file patterns to skills and specs as you add them -->
-| File Pattern | Skill | Spec |
-|-------------|-------|------|
-| `src/Entity/**` | `waaseyaa:entity-system` | entity-system.md |
-| `src/Access/**` | `waaseyaa:access-control` | access-control.md |
-| `src/Provider/**` | `feature-dev` | — |
-| `.claude/rules/**` | `waaseyaa:spec-maintenance` | — |
-| `docs/specs/**` | `waaseyaa:spec-maintenance` | — |
+Read `AGENTS.md` first. Its generated extension region is the vendor-neutral
+authority for GoFormX ownership boundaries, agent roles, credential classes,
+verification commands, and roadmap traceability. This file adds no alternate
+Claude-only product rules.
 
-<!-- Note: waaseyaa:* skills are placeholders. They will not function
-     until the skills are built. The entries document intended routing. -->
+Application decisions live in `docs/adr/`. The cross-service machine contract
+lives in `goformx/goformx` at `goforms/contracts/openapi.v1.yaml`; change that
+contract before implementing a new control-plane call.
 
 ## Specs and workflow
 
@@ -116,7 +113,10 @@ Framework governance follows the **anchor-issue + design-first workflow** (GitHu
 
 ```bash
 composer install                    # Install dependencies
-php -S localhost:8080 -t public     # Dev server
+php vendor/bin/waaseyaa migrate     # Apply tracked migrations to a fresh local database
+php vendor/bin/waaseyaa schema:sync # Materialize registered application entity tables
+composer check                      # Provider-neutral strict verification boundary
+composer dev                        # Concurrent local server
 ./vendor/bin/phpunit                # Run tests
 ./vendor/bin/waaseyaa               # CLI
 bin/maintenance/waaseyaa-version    # Framework provenance (path SHA, lockfile, drift vs golden)
@@ -134,11 +134,13 @@ Set `WAASEYAA_GOLDEN_SHA` or add `.waaseyaa-golden-sha` for CI drift gates (see 
 |------|----------|---------|
 | **Constitution** | `CLAUDE.md` (this file) | Architecture, conventions, orchestration |
 | **Rules** | `.claude/rules/waaseyaa-*.md` | Framework invariants distributed from the installed Foundation package |
-| **Specs** | `docs/specs/*.md` | Domain contracts — read from disk |
+| **Application decisions** | `docs/adr/*.md` | GoFormX control-plane contracts |
+| **Machine contract** | `goformx/goformx:goforms/contracts/openapi.v1.yaml` | Cross-service HTTP authority |
 
 Framework rules are owned by Waaseyaa. Update them via `./vendor/bin/waaseyaa sync-rules` after `composer update`.
 
-When modifying a subsystem, update its spec in the same PR.
+When modifying a boundary, update its ADR and the canonical OpenAPI contract in
+the owning repository in the same issue-traceable change sequence.
 
 ## Known Gaps
 
