@@ -4,40 +4,27 @@ declare(strict_types=1);
 
 namespace App\Controller;
 
+use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationAccessDenied;
 use App\Domain\Organization\OrganizationContext;
 use App\Domain\Organization\OrganizationMembershipService;
+use App\Domain\Organization\OrganizationRequestContextResolverInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Waaseyaa\Access\AccountInterface;
-use Waaseyaa\Access\User\UserInternalFieldReaderInterface;
-use Waaseyaa\Entity\EntityInterface;
 use Waaseyaa\Entity\EntityTypeManagerInterface;
 
 final class OrganizationContextController
 {
-    private const string SESSION_KEY = 'goformx_organization_uuid';
-
     public function __construct(
         private readonly OrganizationMembershipService $memberships,
         private readonly EntityTypeManagerInterface $entityTypeManager,
-        private readonly UserInternalFieldReaderInterface $internalFields,
+        private readonly OrganizationRequestContextResolverInterface $resolver,
     ) {}
 
     public function show(Request $request): JsonResponse
     {
         try {
-            [$userId, $user] = $this->verifiedUser($request);
-            $identity = $this->internalFields->sessionIdentity($user);
-            $selected = $request->getSession()->get(self::SESSION_KEY);
-            $context = $this->memberships->ensurePersonalOrganization($userId, $identity->name);
-
-            if (is_string($selected) && $selected !== $context->organizationId) {
-                $context = $this->memberships->resolve($userId, $selected);
-            }
-            $request->getSession()->set(self::SESSION_KEY, $context->organizationId);
-
-            return $this->contextResponse($context);
+            return $this->contextResponse($this->resolver->resolve($request)->organization);
         } catch (OrganizationAccessDenied $exception) {
             return $this->error(403, 'Forbidden', $exception->getMessage());
         }
@@ -47,15 +34,15 @@ final class OrganizationContextController
     {
         try {
             $this->assertCsrf($request);
-            [$userId] = $this->verifiedUser($request);
+            $account = $this->resolver->account($request);
             $body = json_decode($request->getContent(), true, 32, JSON_THROW_ON_ERROR);
             $organizationId = is_string($body['organization_id'] ?? null) ? trim($body['organization_id']) : '';
             if ($organizationId === '') {
                 return $this->error(400, 'Bad Request', 'organization_id is required.');
             }
 
-            $context = $this->memberships->resolve($userId, $organizationId);
-            $request->getSession()->set(self::SESSION_KEY, $context->organizationId);
+            $context = $this->memberships->resolve($account->userId, $organizationId);
+            $request->getSession()->set(AuthenticatedOrganizationResolver::SESSION_KEY, $context->organizationId);
 
             return $this->contextResponse($context);
         } catch (\JsonException) {
@@ -69,14 +56,14 @@ final class OrganizationContextController
     {
         try {
             $this->assertCsrf($request);
-            [$userId] = $this->verifiedUser($request);
-            $organizationId = (string) $request->getSession()->get(self::SESSION_KEY, '');
+            $account = $this->resolver->account($request);
+            $organizationId = (string) $request->getSession()->get(AuthenticatedOrganizationResolver::SESSION_KEY, '');
             if ($organizationId === '') {
                 return $this->error(409, 'Conflict', 'No active organization is selected.');
             }
 
-            $this->memberships->leave($userId, $organizationId);
-            $request->getSession()->remove(self::SESSION_KEY);
+            $this->memberships->leave($account->userId, $organizationId);
+            $request->getSession()->remove(AuthenticatedOrganizationResolver::SESSION_KEY);
 
             return new JsonResponse(['jsonapi' => ['version' => '1.1'], 'meta' => ['message' => 'Organization left.']]);
         } catch (OrganizationAccessDenied $exception) {
@@ -90,9 +77,9 @@ final class OrganizationContextController
     {
         try {
             $this->assertCsrf($request);
-            [$userId, $user] = $this->verifiedUser($request);
-            $this->memberships->revokeForAccountDeletion($userId);
-            $this->entityTypeManager->getRepository('user')->delete($user);
+            $account = $this->resolver->account($request);
+            $this->memberships->revokeForAccountDeletion($account->userId);
+            $this->entityTypeManager->getRepository('user')->delete($account->entity);
 
             $request->getSession()->clear();
             $request->getSession()->migrate(true);
@@ -103,26 +90,6 @@ final class OrganizationContextController
         } catch (\DomainException $exception) {
             return $this->error(409, 'Conflict', $exception->getMessage());
         }
-    }
-
-    /** @return array{0: int, 1: EntityInterface} */
-    private function verifiedUser(Request $request): array
-    {
-        $account = $request->attributes->get('_account');
-        if (!$account instanceof AccountInterface || !$account->isAuthenticated() || (int) $account->id() <= 0) {
-            throw new OrganizationAccessDenied('Authentication is required.');
-        }
-
-        $userId = (int) $account->id();
-        $user = $this->entityTypeManager->getRepository('user')->find((string) $userId);
-        if (!$user instanceof EntityInterface) {
-            throw new OrganizationAccessDenied('The authenticated account is unavailable.');
-        }
-        if (!$this->internalFields->verification($user)->emailVerified) {
-            throw new OrganizationAccessDenied('Verify your email address before accessing an organization.');
-        }
-
-        return [$userId, $user];
     }
 
     private function contextResponse(OrganizationContext $context): JsonResponse

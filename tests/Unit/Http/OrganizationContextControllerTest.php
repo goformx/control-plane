@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\Unit\Http;
 
 use App\Controller\OrganizationContextController;
+use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationMembershipService;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -62,7 +63,11 @@ final class OrganizationContextControllerTest extends TestCase
         return new OrganizationContextController(
             new OrganizationMembershipService($manager),
             $manager,
-            $this->createStub(UserInternalFieldReaderInterface::class),
+            new AuthenticatedOrganizationResolver(
+                new OrganizationMembershipService($manager),
+                $manager,
+                $this->createStub(UserInternalFieldReaderInterface::class),
+            ),
         );
     }
 }

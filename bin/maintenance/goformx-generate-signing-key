@@ -1,0 +1,35 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+if (!extension_loaded('sodium')) {
+    fwrite(STDERR, "The sodium extension is required to generate GoFormX signing custody.\n");
+    exit(1);
+}
+
+$suffix = bin2hex(random_bytes(4));
+$keyId = $argv[1] ?? ('gofx-fpa-' . gmdate('Ymd') . '-' . $suffix);
+if (preg_match('/\A[A-Za-z0-9._-]{1,128}\z/', $keyId) !== 1) {
+    fwrite(STDERR, "Key id must use 1-128 letters, digits, dots, underscores, or hyphens.\n");
+    exit(2);
+}
+$seed = random_bytes(SODIUM_CRYPTO_SIGN_SEEDBYTES);
+$pair = sodium_crypto_sign_seed_keypair($seed);
+$public = sodium_crypto_sign_publickey($pair);
+$base64Url = static fn(string $bytes): string => rtrim(strtr(base64_encode($bytes), '+/', '-_'), '=');
+$jwk = [
+    'kty' => 'OKP',
+    'crv' => 'Ed25519',
+    'x' => $base64Url($public),
+    'kid' => $keyId,
+    'use' => 'sig',
+    'alg' => 'EdDSA',
+    'state' => 'active',
+];
+
+fwrite(STDERR, "Store the signing seed in .env.local or deployment secret custody; never commit it.\n");
+echo 'GOFORMX_ASSERTION_KEY_ID=' . $keyId . PHP_EOL;
+echo 'GOFORMX_ASSERTION_SIGNING_SEED=' . base64_encode($seed) . PHP_EOL;
+echo 'GOFORMX_ASSERTION_ACTIVE_JWK=' . json_encode($jwk, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . PHP_EOL;
+echo 'GOFORMX_DATA_PLANE_JWKS_SNAPSHOT=' . json_encode(['keys' => [$jwk]], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES) . PHP_EOL;
