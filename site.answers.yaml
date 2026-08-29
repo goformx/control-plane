@@ -18,7 +18,7 @@ capabilities:
     note: Local Waaseyaa authentication with a documented OIDC migration seam.
   - id: organizations
     state: planned
-    note: Organization membership and roles backed by Waaseyaa groups.
+    note: Application-owned tenant context and memberships, with Waaseyaa groups only as optional storage.
   - id: form_management
     state: planned
     note: Ownership-aware form and schema management through api.goformx.com.

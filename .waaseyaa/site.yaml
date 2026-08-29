@@ -18,7 +18,7 @@
     "state": "planned"
   -
     "id": "organizations"
-    "note": "Organization membership and roles backed by Waaseyaa groups."
+    "note": "Application-owned tenant context and memberships, with Waaseyaa groups only as optional storage."
     "state": "planned"
   -
     "id": "submission_operations"
