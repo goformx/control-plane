@@ -10,13 +10,14 @@ Requirements: PHP 8.5, Composer 2, SQLite, and Sodium.
 
 ```bash
 composer install
-php vendor/bin/waaseyaa migrate
-php vendor/bin/waaseyaa schema:sync
+php vendor/bin/waaseyaa install:init
 composer check
 composer dev
 ```
 
 The application is served at `http://127.0.0.1:8080` by default. Local secrets are generated in `.env`; the file and SQLite database are ignored. The development fallback account is disabled by default and must never be enabled in a deployed environment.
+
+Open `/register` to create an account. Registration starts an authenticated but unverified session; `/api/control-plane/context` remains unavailable until the verification link has been used. The first verified dashboard request idempotently provisions the account's personal organization.
 
 ## Architecture
 

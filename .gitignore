@@ -3,7 +3,10 @@
 /files/*
 !/files/.gitkeep
 *.sqlite
+*.sqlite-*
 .phpunit.cache/
+.playwright-cli/
 *.sqlite.*
+/storage/.db-init.lock
 .env
 composer.local.json

@@ -17,3 +17,18 @@ A Waaseyaa user is a human identity. The application owns an explicit organizati
 Human and organization identifiers are opaque stable strings at the service boundary. The Go data plane authorizes its own resource ownership from signed claims and repository predicates. It does not trust an organization identifier supplied independently by a browser.
 
 Account deletion, organization departure, membership changes, and security events are audited. Deletion is suspended when the account is the sole owner of an organization until ownership is transferred or the organization is explicitly deleted.
+
+## Implemented boundary
+
+The application persists `goformx_organization` and `goformx_organization_membership` as non-discoverable, non-JSON:API content entities. Their indexed column storage supports membership lookup and a unique `(organization_uuid, user_id)` grant. Human-facing organization identifiers are UUIDs; integer storage keys never cross the application boundary.
+
+The authenticated management boundary is:
+
+- `GET /api/control-plane/context` resolves the session's selected organization or idempotently creates the verified account's personal workspace.
+- `POST /api/control-plane/context/switch` treats `organization_id` as a selector and resolves it against the acting user's active memberships before changing the session.
+- `POST /api/control-plane/organizations/leave` revokes membership, but refuses to orphan an organization whose only owner is leaving.
+- `DELETE /api/control-plane/account` revokes memberships before deleting the user and refuses deletion while the user solely owns an organization.
+
+Every mutation requires an authenticated session and a matching `X-XSRF-TOKEN`. Entity lifecycle auditing records organization and membership changes with the acting account. No route issues, accepts, or returns a GoFormX data-plane credential.
+
+Personal-workspace creation is deliberately lazy at the first verified context request rather than a best-effort email-verification side effect. The unique membership constraint makes retries idempotent, and the service removes an organization if its initial owner grant cannot be saved, so a transient write failure cannot leave an ownerless workspace.
