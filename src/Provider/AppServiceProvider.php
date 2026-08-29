@@ -22,6 +22,7 @@ use App\Entity\OrganizationMembership;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Waaseyaa\Access\User\UserInternalFieldReaderInterface;
+use Waaseyaa\Database\DatabaseInterface;
 use Waaseyaa\Entity\EntityType;
 use Waaseyaa\Entity\EntityTypeManager;
 use Waaseyaa\Foundation\Diagnostic\CleanUrlProbe;
@@ -39,6 +40,7 @@ final class AppServiceProvider extends ServiceProvider
 
         $this->singleton(OrganizationMembershipService::class, fn() => new OrganizationMembershipService(
             $this->resolve(EntityTypeManager::class),
+            $this->resolve(DatabaseInterface::class),
         ));
         $this->singleton(AuthenticatedOrganizationResolver::class, fn() => new AuthenticatedOrganizationResolver(
             $this->resolve(OrganizationMembershipService::class),
@@ -50,7 +52,6 @@ final class AppServiceProvider extends ServiceProvider
         ));
         $this->singleton(OrganizationContextController::class, fn() => new OrganizationContextController(
             $this->resolve(OrganizationMembershipService::class),
-            $this->resolve(EntityTypeManager::class),
             $this->resolve(AuthenticatedOrganizationResolver::class),
         ));
         $this->singleton(SigningKey::class, fn() => SigningKey::fromBase64Seed(

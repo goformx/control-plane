@@ -48,7 +48,11 @@ final readonly class AuthenticatedOrganizationResolver implements OrganizationRe
     {
         $account = $this->account($request);
         $selected = $request->getSession()->get(self::SESSION_KEY);
-        $context = $this->memberships->ensurePersonalOrganization($account->userId, $account->displayName);
+        $context = $this->memberships->ensurePersonalOrganization(
+            $account->userId,
+            $account->subjectId,
+            $account->displayName,
+        );
         if (is_string($selected) && $selected !== $context->organizationId) {
             $context = $this->memberships->resolve($account->userId, $selected);
         }
