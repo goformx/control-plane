@@ -57,6 +57,15 @@ return [
     // File storage root for LocalFileRepository (media package).
     'files_dir' => getenv('WAASEYAA_FILES_DIR') ?: __DIR__ . '/../storage/files',
 
+    // Auth email delivery. Public registration remains disabled by default in
+    // production until these values and GOFORMX_REGISTRATION_MODE=open are set.
+    'mail' => [
+        'transport' => 'sendgrid',
+        'sendgrid_api_key' => getenv('SENDGRID_API_KEY') ?: '',
+        'from_address' => getenv('GOFORMX_MAIL_FROM_ADDRESS') ?: '',
+        'from_name' => getenv('GOFORMX_MAIL_FROM_NAME') ?: 'GoFormX',
+    ],
+
     // Bearer auth settings for machine clients.
     // JWT uses HS256 with this shared secret.
     'jwt_secret' => getenv('WAASEYAA_JWT_SECRET') ?: '',
@@ -83,6 +92,17 @@ return [
     // Dev-only fallback account for local built-in server workflows.
     // Must remain false outside local development.
     'auth' => [
+        // Self-service accounts remain application-local at launch. OIDC is a
+        // future migration seam, not a dependency of the first release.
+        'registration' => getenv('GOFORMX_REGISTRATION_MODE') ?: (
+            in_array(getenv('APP_ENV') ?: 'production', ['local', 'dev', 'development'], true)
+                ? 'open'
+                : 'admin'
+        ),
+        'require_verified_email' => true,
+        // Keep auth-token HMAC custody separate from JWT machine credentials.
+        // When omitted, Waaseyaa derives it from WAASEYAA_APP_SECRET.
+        'token_secret' => getenv('WAASEYAA_AUTH_TOKEN_SECRET') ?: '',
         'dev_fallback_account' => filter_var(
             getenv('WAASEYAA_DEV_FALLBACK_ACCOUNT') ?: false,
             FILTER_VALIDATE_BOOLEAN,
