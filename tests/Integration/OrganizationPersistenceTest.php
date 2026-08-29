@@ -7,6 +7,7 @@ namespace App\Tests\Integration;
 use App\Domain\Organization\OrganizationMembershipService;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Uid\Uuid;
+use Waaseyaa\Auth\Event\AuthLifecycleEvent;
 use Waaseyaa\Entity\EntityInterface;
 use Waaseyaa\Entity\EntityTypeManagerInterface;
 use Waaseyaa\Foundation\Kernel\HttpKernel;
@@ -14,6 +15,29 @@ use Waaseyaa\User\DevAdminAccount;
 
 final class OrganizationPersistenceTest extends TestCase
 {
+    public function testAuthLifecycleEventsReachTheAppendOnlyAuditLedger(): void
+    {
+        $kernel = new HttpKernel(dirname(__DIR__, 2));
+        $kernel->bootForCli();
+        $userId = random_int(1_000_000, 2_000_000_000);
+        $kernel->getEventDispatcher()->dispatch(
+            new AuthLifecycleEvent((string) $userId, 'login_succeeded', ['two_factor' => true]),
+            AuthLifecycleEvent::NAME,
+        );
+
+        $events = iterator_to_array($kernel->getDatabase()->select('audit_event', 'ae')
+            ->fields('ae', ['actor_uid', 'attributes'])
+            ->condition('actor_uid', $userId)
+            ->orderBy('id', 'DESC')
+            ->range(0, 1)
+            ->execute());
+
+        self::assertCount(1, $events);
+        self::assertSame($userId, (int) $events[0]['actor_uid']);
+        self::assertStringContainsString('auth.login_succeeded', (string) $events[0]['attributes']);
+        self::assertStringNotContainsString('password', (string) $events[0]['attributes']);
+    }
+
     public function testRepeatedPersonalProvisioningPersistsOneOrganizationAndMembership(): void
     {
         $root = dirname(__DIR__, 2);

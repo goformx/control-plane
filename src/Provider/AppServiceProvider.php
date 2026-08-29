@@ -17,15 +17,21 @@ use App\Infrastructure\GoFormX\JwksDocument;
 use App\Infrastructure\GoFormX\ManagementApiClient;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
 use App\Infrastructure\GoFormX\SigningKey;
+use App\Infrastructure\Audit\AuthLifecycleAuditListener;
 use App\Entity\Organization;
 use App\Entity\OrganizationMembership;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Waaseyaa\Access\User\UserInternalFieldReaderInterface;
+use Waaseyaa\Audit\Storage\AppendOnlyAuditDatabase;
+use Waaseyaa\Audit\Writer\AuditEventWriter;
+use Waaseyaa\Auth\Event\AuthLifecycleEvent;
 use Waaseyaa\Database\DatabaseInterface;
 use Waaseyaa\Entity\EntityType;
 use Waaseyaa\Entity\EntityTypeManager;
 use Waaseyaa\Foundation\Diagnostic\CleanUrlProbe;
+use Waaseyaa\Foundation\Event\EventDispatcherInterface;
+use Waaseyaa\Foundation\Log\LoggerInterface;
 use Waaseyaa\Foundation\ServiceProvider\ServiceProvider;
 use Waaseyaa\HttpClient\StreamHttpClient;
 use Waaseyaa\Routing\RouteBuilder;
@@ -41,6 +47,12 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(OrganizationMembershipService::class, fn() => new OrganizationMembershipService(
             $this->resolve(EntityTypeManager::class),
             $this->resolve(DatabaseInterface::class),
+        ));
+        $this->singleton(AuthLifecycleAuditListener::class, fn() => new AuthLifecycleAuditListener(
+            new AuditEventWriter(
+                new AppendOnlyAuditDatabase($this->resolve(DatabaseInterface::class)),
+                $this->resolve(LoggerInterface::class),
+            ),
         ));
         $this->singleton(AuthenticatedOrganizationResolver::class, fn() => new AuthenticatedOrganizationResolver(
             $this->resolve(OrganizationMembershipService::class),
@@ -80,6 +92,15 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(FirstPartyJwksController::class, fn() => new FirstPartyJwksController(
             fn(): JwksDocument => $this->resolve(JwksDocument::class),
         ));
+    }
+
+    public function boot(): void
+    {
+        $events = $this->resolve(EventDispatcherInterface::class);
+        $listener = $this->resolve(AuthLifecycleAuditListener::class);
+        assert($events instanceof EventDispatcherInterface);
+        assert($listener instanceof AuthLifecycleAuditListener);
+        $events->addListener(AuthLifecycleEvent::NAME, [$listener, 'record']);
     }
 
     public function routes(WaaseyaaRouter $router, ?\Waaseyaa\Entity\EntityTypeManager $entityTypeManager = null): void
