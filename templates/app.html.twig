@@ -23,7 +23,7 @@
     </aside>
     <section id="welcome" class="panel"><p class="eyebrow">SCHEMA FIRST. YOUR INTERFACE.</p><h2>A form starts with a contract.</h2><p>Create a form from the starter schema, paste your own JSON Schema, or bring one drafted by your own tools. Review it here before publishing.</p><p class="muted">The UI and external clients use the same business API. Your schema stays portable.</p></section>
     <section id="editor-panel" hidden aria-labelledby="editor-heading">
-      <div class="section-heading"><div><p id="form-status" class="eyebrow"></p><h2 id="editor-heading" tabindex="-1">New form</h2></div><button id="reload-form" type="button" hidden>Reload server version</button></div>
+      <div class="section-heading"><div><p id="form-status" class="eyebrow"></p><h2 id="editor-heading" tabindex="-1">New form</h2></div><div class="actions"><button id="review-submissions" type="button" hidden>Review submissions</button><button id="reload-form" type="button" hidden>Reload server version</button></div></div>
       <p id="read-only" class="muted" hidden>Your workspace role is read-only. An owner or admin can save and publish.</p>
       <section class="panel" aria-labelledby="metadata-heading"><h3 id="metadata-heading">Form details</h3>
         <form id="metadata-form"><fieldset id="metadata-fields"><div class="two-columns"><label>Name<input id="form-name" required pattern="[a-z][a-z0-9-]{2,62}" maxlength="63" placeholder="contact-us" aria-describedby="name-help"></label><label>Title<input id="form-title" required minlength="3" maxlength="100" placeholder="Contact us"></label></div>

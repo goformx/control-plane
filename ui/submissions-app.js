@@ -99,6 +99,7 @@ export function initSubmissions({ context, verifyWorkspace }) {
     } catch (error) {
       if (generation !== current) return;
       $('submission-list').replaceChildren(); clearDetail(); selected = null; nextCursor = '';
+      $('submission-message').textContent = '';
       $('submission-state').textContent = 'Submissions could not be loaded.';
       $('submission-error').textContent = error instanceof TypeError || error instanceof SyntaxError ? 'The submission response was interrupted or invalid. Retry to reload.' : error.message;
       $('submission-error').hidden = false; $('submission-error').focus();
@@ -119,10 +120,11 @@ export function initSubmissions({ context, verifyWorkspace }) {
       button.textContent = `${row.submittedAt} · ${row.status} · schema v${row.schemaVersion} · ${row.id}`;
       button.onclick = () => act(active => detail(row.id, active)); $('submission-list').append(button);
     }
-    $('submission-state').textContent = result.data.length ? `${result.data.length} submissions · page ${previous.length + 1}` : 'No submissions match these filters.';
+    $('submission-state').textContent = result.data.length ? `${result.data.length} ${result.data.length === 1 ? 'submission' : 'submissions'} · page ${previous.length + 1}` : 'No submissions match these filters.';
   }
   async function detail(id, active) {
     clearDetail();
+    $('submission-message').textContent = 'Loading submission detail…';
     const { data } = await request(`${path()}/${encodeURIComponent(id)}`);
     if (!active()) return;
     if (data.id !== id || data.formId !== context().form.id) throw new Error('The submission response does not match this form.');
@@ -140,6 +142,7 @@ export function initSubmissions({ context, verifyWorkspace }) {
     $('submission-redactions').textContent = data.redactedPaths?.length ? `Redacted by accepted schema policy: ${data.redactedPaths.join(', ')}` : 'No sensitive-field annotations apply to this accepted version.';
     $('submission-schema').textContent = stringify(data.schema, null, 2);
     $('submission-detail').hidden = false; $('submission-detail-heading').focus();
+    $('submission-message').textContent = `Viewing accepted schema version ${data.schemaVersion}.`;
     $('submission-deliveries').textContent = 'Loading recent delivery history…';
     try {
       const deliveries = await request(`/api/control-plane/forms/${encodeURIComponent(data.formId)}/deliveries`);
@@ -179,5 +182,5 @@ export function initSubmissions({ context, verifyWorkspace }) {
   window.addEventListener('pagehide', reset);
   document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') reset(); });
   reset();
-  return { reset, controls };
+  return { reset, controls, open: () => { $('submissions-panel').scrollIntoView({ block: 'start' }); $('submission-filters').requestSubmit(); } };
 }

@@ -71,6 +71,8 @@ async function act(work) {
 }
 function controls() {
   submissions.controls();
+  $('review-submissions').hidden = !state.form;
+  $('review-submissions').disabled = !writable() || state.busy;
   const canWrite = writable() && !state.busy && !state.uncertain;
   $('new-form').disabled = !canWrite;
   $('metadata-fields').disabled = !canWrite;
@@ -234,6 +236,7 @@ async function saveMetadata() {
 }
 
 $('new-form').onclick = () => { if (confirmDiscard()) { clearError(); newForm(); } };
+$('review-submissions').onclick = () => submissions.open();
 $('refresh').onclick = () => act(async () => { await verifyWorkspace(); await listForms(); });
 $('previous').onclick = () => act(async () => { state.offset -= PAGE_SIZE; await listForms(); });
 $('next').onclick = () => act(async () => { state.offset += PAGE_SIZE; await listForms(); });

@@ -26,7 +26,7 @@ test('submission detail uses accepted schema, safe text, precise values and memo
   const { page, url, data } = await fixture(t);
   data.deliveries = [{ id: '55555555-5555-4555-8555-555555555555', submissionId: row().id,
     status: 'delivered', attemptCount: 2, updatedAt: '2026-08-30T12:40:00Z', deliveredAt: '2026-08-30T12:40:00Z', lastHttpStatus: 204 }];
-  await page.getByRole('button', { name: 'Load submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Review submissions', exact: true }).click();
   await page.locator('#submission-list button').first().click();
   await page.getByRole('heading', { name: 'Submission detail', exact: true }).waitFor();
   assert.match(await page.locator('#submission-values').textContent(), /Accepted amount/);
@@ -54,7 +54,7 @@ test('pagination and applied filters drive both verified export formats without 
   await page.getByRole('button', { name: 'Load submissions', exact: true }).click();
   await page.getByText('25 submissions · page 1', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Next submissions', exact: true }).click();
-  await page.getByText('1 submissions · page 2', { exact: true }).waitFor();
+  await page.getByText('1 submission · page 2', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Previous submissions', exact: true }).click();
   await page.getByText('25 submissions · page 1', { exact: true }).waitFor();
   await page.getByRole('textbox', { name: 'Accepted schema version', exact: true }).fill('1');

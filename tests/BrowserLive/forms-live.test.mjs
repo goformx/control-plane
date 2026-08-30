@@ -120,7 +120,7 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
   await owner.getByText('Version 3 published.', { exact: false }).waitFor();
   await owner.getByRole('button', { name: 'Load submissions', exact: true }).click();
-  await owner.getByText('1 submissions · page 1', { exact: true }).waitFor();
+  await owner.getByText('1 submission · page 1', { exact: true }).waitFor();
   await owner.locator('#submission-list button').first().click();
   await owner.getByRole('heading', { name: 'Submission detail', exact: true }).waitFor();
   const acceptedValues = await owner.locator('#submission-values').textContent();
@@ -130,7 +130,7 @@ test('real browser login → create → version → publish → public submissio
   assert.match(await owner.locator('#submission-schema').textContent(), /Original accepted integer/);
   await owner.getByRole('textbox', { name: 'Accepted schema version', exact: true }).fill('2');
   await owner.getByRole('button', { name: 'Apply submission filters', exact: true }).click();
-  await owner.getByText('1 submissions · page 1', { exact: true }).waitFor();
+  await owner.getByText('1 submission · page 1', { exact: true }).waitFor();
   for (const format of ['json', 'csv']) {
     const ready = owner.waitForEvent('download');
     await owner.getByRole('button', { name: `Export ${format.toUpperCase()}`, exact: true }).click();
