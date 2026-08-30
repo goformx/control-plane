@@ -181,7 +181,8 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
     {
         $schema = ['$schema' => 'https://json-schema.org/draft/2020-12/schema', 'type' => 'object',
             'properties' => ['message' => ['type' => 'string'], 'anything' => new \stdClass()]];
-        $input = ['name' => 'browser-' . bin2hex(random_bytes(6)), 'title' => 'Browser workflow', 'schema' => $schema];
+        $input = ['name' => 'browser-' . bin2hex(random_bytes(6)), 'title' => 'Browser workflow', 'schema' => $schema,
+            'allowedOrigins' => ['https://example.test']];
         $withoutCsrf = $cookies;
         unset($withoutCsrf['XSRF-TOKEN']);
         self::assertSame(403, $this->browserRequest($url, 'POST', '/api/control-plane/forms', $withoutCsrf, $input)['status']);
@@ -190,15 +191,25 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
         $form = json_decode($created['body'], true, 32, JSON_THROW_ON_ERROR)['data'];
         self::assertSame($organization, $form['organizationId']);
         self::assertSame('draft', $form['status']);
+        self::assertSame($input['allowedOrigins'], $form['allowedOrigins']);
         $path = '/api/control-plane/forms/' . $form['id'];
         $detail = $this->browserRequest($url, 'GET', $path, $cookies);
         self::assertSame(200, $detail['status']);
+        self::assertSame($input['allowedOrigins'], json_decode($detail['body'], true, 32, JSON_THROW_ON_ERROR)['data']['allowedOrigins']);
         $etag = $detail['headers']['etag'];
         self::assertSame(428, $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Updated title'])['status']);
-        $updated = $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Updated title'], ['If-Match: ' . $etag]);
+        $updated = $this->browserRequest($url, 'PATCH', $path, $cookies,
+            ['title' => 'Updated title', 'allowedOrigins' => ['https://updated.example.test']], ['If-Match: ' . $etag]);
         self::assertSame(200, $updated['status'], $updated['body']);
+        self::assertSame(['https://updated.example.test'], json_decode($updated['body'], true, 32, JSON_THROW_ON_ERROR)['data']['allowedOrigins']);
         self::assertNotSame($etag, $updated['headers']['etag']);
         self::assertSame(412, $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Stale overwrite'], ['If-Match: ' . $etag])['status']);
+        $cleared = $this->browserRequest($url, 'PATCH', $path, $cookies, ['allowedOrigins' => []], ['If-Match: ' . $updated['headers']['etag']]);
+        self::assertSame(200, $cleared['status'], $cleared['body']);
+        self::assertSame([], json_decode($cleared['body'], true, 32, JSON_THROW_ON_ERROR)['data']['allowedOrigins']);
+        $afterClear = $this->browserRequest($url, 'GET', $path, $cookies);
+        self::assertSame(200, $afterClear['status']);
+        self::assertSame([], json_decode($afterClear['body'], true, 32, JSON_THROW_ON_ERROR)['data']['allowedOrigins']);
         $invalid = $this->browserRequest($url, 'POST', $path . '/versions', $cookies, ['schema' => ['type' => 'array']]);
         self::assertSame(422, $invalid['status']);
         self::assertStringContainsString('/schema', $invalid['body']);
