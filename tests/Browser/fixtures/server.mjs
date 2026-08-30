@@ -31,7 +31,8 @@ export async function startServer({ populated = false, role = 'owner', port = 0 
     if (request.method !== 'GET' && request.headers['x-xsrf-token'] !== 'test-csrf') { send(403, { errors: [{ detail: 'CSRF required' }] }); return; }
     if (url.pathname === '/api/control-plane/forms' && request.method === 'GET') {
       if (data.delayList) await new Promise(resolve => setTimeout(resolve, data.delayList));
-      send(200, { data: data.forms, meta: { total: data.forms.length } }); return;
+      const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 25);
+      send(200, { data: data.forms.slice(offset, offset + limit), meta: { total: data.forms.length } }); return;
     }
     if (url.pathname === '/api/control-plane/forms' && request.method === 'POST') {
       const form = { ...body, id: FORM_ID, organizationId: ORG_ID, publicKey: 'gfpk_example', status: 'draft', currentVersion: 1 }; delete form.schema;

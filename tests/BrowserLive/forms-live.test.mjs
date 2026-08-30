@@ -38,6 +38,11 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByText('Form created as a draft.', { exact: false }).waitFor();
   const schema = owner.getByRole('textbox', { name: 'JSON Schema editor' });
   const original = JSON.parse(await schema.innerText());
+  const invalid = JSON.stringify({ ...original, type: 'array' });
+  await schema.fill(invalid);
+  await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
+  await owner.locator('#error-fields li').first().waitFor();
+  assert.equal(await schema.innerText(), invalid, 'Go validation failure retains the editable schema');
   await schema.fill(JSON.stringify({ ...original, properties: { ...original.properties, unconstrained: {} } }));
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.getByText('Saved draft version 2.', { exact: false }).waitFor();

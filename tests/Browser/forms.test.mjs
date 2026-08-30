@@ -97,3 +97,38 @@ test('mobile layout, focus, unsaved navigation and session expiry', async t => {
   assert.match(await content.innerText(), /changed/);
   assert.equal(await page.getByRole('button', { name: 'Validate & save new draft' }).isDisabled(), true);
 });
+
+test('loading and pagination use bounded server pages', async t => {
+  const { page, data } = await fixture(t, { populated: true });
+  data.forms = Array.from({ length: 26 }, (_, index) => ({ ...data.forms[0], id: String(index), title: `Form ${index}`, name: `form-${index}` }));
+  data.delayList = 300;
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByText('Loading forms…', { exact: true }).waitFor();
+  await page.getByText('26 forms', { exact: true }).waitFor();
+  assert.equal(await page.locator('#forms-list button').count(), 25);
+  await page.getByRole('button', { name: 'Next', exact: true }).click();
+  await page.getByText('Page 2', { exact: true }).waitFor();
+  assert.equal(await page.locator('#forms-list button').count(), 1);
+  assert.equal(await page.getByRole('button', { name: 'Next', exact: true }).isDisabled(), true);
+  await page.getByRole('button', { name: 'Previous', exact: true }).click();
+  await page.getByText('Page 1', { exact: true }).waitFor();
+});
+
+test('acknowledged creation followed by failed reload cannot repeat form creation', async t => {
+  const { page, data } = await fixture(t);
+  await page.getByRole('button', { name: '+ New form', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Name', exact: true }).fill('contact');
+  await page.getByRole('textbox', { name: 'Title', exact: true }).fill('Contact us');
+  data.failure = { method: 'GET', path: `/api/control-plane/forms/${FORM_ID}`, status: 503, body: { error: { message: 'Readback unavailable' } } };
+  await page.getByRole('button', { name: 'Validate & create form' }).click();
+  await page.getByText('Readback unavailable', { exact: true }).waitFor();
+  assert.equal(data.requests.filter(r => r.method === 'POST' && r.path === '/api/control-plane/forms').length, 1);
+  assert.equal(await page.locator('#save-schema').isDisabled(), true);
+  await page.getByRole('button', { name: 'Reload server version', exact: true }).click();
+  await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await schemaText(page, '{"type":"object","properties":{"privateDraft":{}}}');
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: '+ New form', exact: true }).click();
+  await page.getByRole('textbox', { name: 'JSON Schema editor' }).focus(); await page.keyboard.press('ControlOrMeta+z');
+  assert.doesNotMatch(await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText(), /privateDraft/);
+});
