@@ -11,7 +11,14 @@ test('real browser login → create → version → publish → public submissio
   assert.equal(process.env.GOFORMX_PUBLIC_API_URL, 'http://127.0.0.1:18090');
   const fixture = input => {
     try { return execFileSync('php', ['tests/BrowserLive/fixtures/users.php'], { input: JSON.stringify(input), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 30000 }); }
-    catch { throw new Error(`Disposable browser fixture ${input.action} failed or timed out; credentials and logs withheld.`); }
+    catch (error) {
+      let location = 'unavailable';
+      try {
+        const info = JSON.parse(error.stderr);
+        if (/^[a-z-]+$/.test(info.stage) && /^[A-Za-z0-9_\\]+$/.test(info.exception) && /^[A-Za-z0-9_.-]+$/.test(info.file) && Number.isInteger(info.line)) location = `${info.stage}: ${info.exception} in ${info.file}:${info.line}`;
+      } catch { /* Never print unstructured subprocess output. */ }
+      throw new Error(`Disposable browser fixture ${input.action} failed or timed out (${location}); credentials and logs withheld.`);
+    }
   };
   const users = JSON.parse(fixture({ action: 'create' }));
   let browserServer;

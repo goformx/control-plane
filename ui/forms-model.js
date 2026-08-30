@@ -1,7 +1,5 @@
-import { parse, stringify, isSafeNumber, LosslessNumber } from 'lossless-json';
-export { stringify };
-// Preserve numeric constraints which native JSON.parse would silently round.
-export const parseJSON = text => parse(text, null, { parseNumber: value => isSafeNumber(value) ? Number(value) : new LosslessNumber(value) });
+import { parseJSON, stringify } from './schema-json.js';
+export { parseJSON, stringify };
 export const SCHEMA_DIALECT = 'https://json-schema.org/draft/2020-12/schema';
 export const MAX_SCHEMA_BYTES = 900_000; // Leave room for metadata in the 1 MiB request envelope.
 export const PAGE_SIZE = 25;
@@ -14,7 +12,10 @@ export const starterSchema = () => ({
 export function parseSchema(text) {
   if (new TextEncoder().encode(text).length > MAX_SCHEMA_BYTES) throw new Error('Schema is too large for the editor (900 KB limit).');
   let schema;
-  try { schema = parseJSON(text); } catch { throw new Error('JSON syntax is invalid or keys are duplicated. Check the highlighted editor and try again.'); }
+  try { schema = parseJSON(text); } catch (error) {
+    if (!(error instanceof SyntaxError)) throw error;
+    throw new Error('JSON syntax is invalid or keys are duplicated. Check the highlighted editor and try again.');
+  }
   if (schema === null || typeof schema !== 'object' || Array.isArray(schema)) throw new Error('A GoFormX form definition must be a JSON object.');
   return schema; // Go, not this helper, validates the schema vocabulary and policy budgets.
 }

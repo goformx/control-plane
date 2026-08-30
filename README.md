@@ -29,6 +29,12 @@ CodeMirror provides JSON highlighting, completion and undo; field assistance is
 optional. Preview does not validate schemas or fetch references. Go remains the
 validation authority. Form details and schema drafts save independently.
 
+The editor requires a current browser supporting native JSON source access and
+`JSON.rawJSON`; startup checks this before loading the workspace. Numeric
+constraints retain their original precision, special property names remain
+ordinary data, and duplicate keys are rejected. The lossless-json dependency
+supplies only its numeric-safety predicate, not its parser or serializer.
+
 Run `npm run build` after changing `ui/`; commit the generated public bundle.
 `composer check` verifies the generated site contract, PHP suite, bundle drift,
 UI model tests and isolated rendered-browser tests. Browser installation is a

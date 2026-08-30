@@ -17,6 +17,7 @@ use Waaseyaa\Foundation\Kernel\HttpKernel;
 use Waaseyaa\User\DevAdminAccount;
 use Waaseyaa\User\User;
 
+$stage = 'boot';
 try {
     $kernel = new HttpKernel($root);
     $kernel->bootForCli();
@@ -25,6 +26,7 @@ try {
     $users = $manager->getRepository('user');
     $input = json_decode(stream_get_contents(STDIN), true, 16, JSON_THROW_ON_ERROR);
     if ($input['action'] === 'create') {
+        $stage = 'create';
         $result = [];
         foreach (['Owner', 'Foreign'] as $name) {
             $email = 'browser-ui-' . bin2hex(random_bytes(10)) . '@example.test';
@@ -40,26 +42,33 @@ try {
         fwrite(STDOUT, json_encode($result, JSON_THROW_ON_ERROR));
     } elseif ($input['action'] === 'cleanup') {
         foreach ($input['users'] as $fixture) {
+            $stage = 'load-user';
             $user = $users->find((string) $fixture['id']);
             if (!$user instanceof User || !hash_equals($user->uuid(), $fixture['subject']) || !str_starts_with((string) $user->get('mail'), 'browser-ui-')) {
                 throw new RuntimeException('Fixture identity mismatch.');
             }
             $memberships = $manager->getRepository('goformx_organization_membership');
+            $stage = 'find-memberships';
             $ids = $memberships->getQuery()->accessCheck(false)->condition('user_id', (int) $user->id())->execute();
             foreach ($memberships->findMany($ids) as $membership) {
                 $organizations = $manager->getRepository('goformx_organization');
+                $stage = 'find-organizations';
                 $organizationIds = $organizations->getQuery()->accessCheck(false)->condition('uuid', (string) $membership->get('organization_uuid'))->execute();
+                $stage = 'delete-membership';
                 $memberships->delete($membership);
                 foreach ($organizations->findMany($organizationIds) as $organization) {
+                    $stage = 'delete-organization';
                     if ((int) $organization->get('created_by_user_id') === (int) $user->id()) $organizations->delete($organization);
                 }
             }
+            $stage = 'delete-user';
             $users->delete($user);
         }
     } else {
         exit(2);
     }
-} catch (Throwable) {
-    fwrite(STDERR, "Browser fixture failed; sensitive diagnostics withheld.\n");
+} catch (Throwable $error) {
+    // Code location only, never exception messages, SQL, arguments or identity data.
+    fwrite(STDERR, json_encode(['stage' => $stage, 'exception' => get_class($error), 'file' => basename($error->getFile()), 'line' => $error->getLine()], JSON_THROW_ON_ERROR));
     exit(1);
 }

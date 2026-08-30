@@ -1,6 +1,7 @@
 import { EditorView, basicSetup } from 'codemirror';
 import { Compartment, EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
+import { requireJsonSupport } from './schema-json.js';
 import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, parseSchema, parseJSON, stringify, publicEndpoints, starterSchema } from './forms-model.js';
 
 const $ = id => document.getElementById(id);
@@ -253,4 +254,4 @@ $('copy-example').onclick = () => act(async () => { await navigator.clipboard.wr
 $('logout').onclick = () => { if (confirmDiscard()) act(async () => { await api('/api/auth/logout', { method: 'POST' }); state.schemaBaseline = schemaText(); state.metadataBaseline = metadataSnapshot(); location.assign('/'); }); };
 window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('.brand').onclick = event => { if (!confirmDiscard()) event.preventDefault(); };
-await act(async () => { await verifyWorkspace(); await listForms(); });
+await act(async () => { requireJsonSupport(); await verifyWorkspace(); await listForms(); });
