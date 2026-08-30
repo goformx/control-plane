@@ -42,6 +42,9 @@ final class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->singleton(AuthPageController::class, fn() => new AuthPageController(
+            (string) $this->config['goformx']['public_api_url'],
+        ));
         $this->entityType(EntityType::fromClass(Organization::class, discoverable: false));
         $this->entityType(EntityType::fromClass(OrganizationMembership::class, discoverable: false));
 

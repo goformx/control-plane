@@ -10,3 +10,5 @@
 /storage/.db-init.lock
 .env
 composer.local.json
+/node_modules/
+/output/playwright/

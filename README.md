@@ -6,16 +6,53 @@ This repository owns browser sessions, accounts, organization membership, naviga
 
 ## Local development
 
-Requirements: PHP 8.5, Composer 2, SQLite, and Sodium.
+Requirements: PHP 8.5, Composer 2, SQLite, Sodium, and Node.js 22 for UI development and verification.
 
 ```bash
 composer install
+npm ci
+npx --no-install playwright install chromium
 php vendor/bin/waaseyaa install:init
 composer check
 composer dev
 ```
 
 The application is served at `http://127.0.0.1:8080` by default. Local secrets are generated in `.env`; the file and SQLite database are ignored. The development fallback account is disabled by default and must never be enabled in a deployed environment.
+
+Set `GOFORMX_PUBLIC_API_URL` explicitly to the browser-reachable Go API origin
+(HTTPS outside loopback). This controls public integration examples; it is
+separate from the private server transport setting `GOFORMX_API_URL`.
+
+`/app` contains the schema-first form editor. Owner/admin memberships can save
+details, create immutable drafts, and explicitly publish. Members can read.
+CodeMirror provides JSON highlighting, completion and undo; field assistance is
+optional. Preview does not validate schemas or fetch references. Go remains the
+validation authority. Form details and schema drafts save independently.
+See the [forms workflow](docs/forms-workflow.md) for creation, publication,
+AI/API integration, and recovery from conflicts or uncertain responses.
+
+The editor requires a current browser supporting native JSON source access and
+`JSON.rawJSON`; startup checks this before loading the workspace. Numeric
+constraints retain their original precision, special property names remain
+ordinary data, and duplicate keys are rejected. The lossless-json dependency
+supplies only its numeric-safety predicate, not its parser or serializer.
+
+Run `npm run build` after changing `ui/`; commit the generated public bundle.
+`composer check` verifies the generated site contract, PHP suite, bundle drift,
+UI model tests and isolated rendered-browser tests. Browser installation is a
+bootstrap step, not hidden network work inside verification. Native Windows
+still has the tracked framework executable-bit acceptance limitation (#2676);
+the Linux CI gate runs the full command.
+
+The separate cross-service workflow additionally runs `npm run test:live`
+against real Waaseyaa sessions, Go HTTP handlers and disposable PostgreSQL.
+The HTTP/custody and browser rehearsals use separate disposable environments,
+so their loopback traffic does not share the framework's persistent per-IP
+rate-limit budget. Both must pass the `authenticated-boundary` gate; production
+rate limits remain enabled and unchanged.
+Its verified-account fixtures do not replace the registration/reset/session
+release gate in #118. No browser storage state, account passwords, assertions,
+or raw credential-adjacent logs are published as test artifacts.
 
 Open `/register` to create an account. Registration starts an authenticated but unverified session; `/api/control-plane/context` remains unavailable until the verification link has been used. The first verified dashboard request idempotently provisions the account's personal organization.
 

@@ -37,7 +37,12 @@
     },
     "scripts": {
         "audit-site": "./bin/maintenance/waaseyaa-audit-site",
-        "check": "@php bin/maintenance/site-verify",
+        "check": [
+            "@php bin/maintenance/site-verify",
+            "@php vendor/bin/phpunit --no-coverage",
+            "npm run check",
+            "npm run test:browser"
+        ],
         "site-verify": "@check",
         "dev": [
             "Composer\\Config::disableProcessTimeout",
