@@ -13,6 +13,7 @@ enum SubmissionOperation: string
     case List = 'list';
     case Get = 'get';
     case Export = 'export';
+    case Deliveries = 'deliveries';
 
     public function method(): string
     {
@@ -26,10 +27,11 @@ enum SubmissionOperation: string
 
     public function template(): string
     {
-        return '/v1/forms/{formId}/submissions' . match ($this) {
-            self::List => '',
-            self::Get => '/{submissionId}',
-            self::Export => '/export',
+        return '/v1/forms/{formId}/' . match ($this) {
+            self::List => 'submissions',
+            self::Get => 'submissions/{submissionId}',
+            self::Export => 'submissions/export',
+            self::Deliveries => 'deliveries',
         };
     }
 

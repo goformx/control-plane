@@ -69,6 +69,8 @@ test('real browser login → create → version → publish → public submissio
   assert.equal(await readSchemaEditor(owner), invalid, 'Go validation failure retains the editable schema');
   const revised = { ...original, properties: { ...original.properties, unconstrained: {}, ['__proto__']: { type: 'string' } } };
   revised.properties.exactInteger = parseJSON('{"type":"integer","minimum":9007199254740993}');
+  revised.properties.exactInteger.title = 'Original accepted integer';
+  revised['x-goformx-sensitive'] = ['/email', '/message'];
   revised.properties.exactDecimal = parseJSON('{"type":"number","minimum":0.1234567890123456789}');
   const exactSchema = stringify(revised);
   assert.match(exactSchema, /"minimum":\s*9007199254740993/);
@@ -107,9 +109,55 @@ test('real browser login → create → version → publish → public submissio
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);
+  // Publishing a different policy must not reinterpret an already accepted row.
+  const newer = parseJSON(stringify(revised));
+  newer.properties.exactInteger.title = 'Newer integer label';
+  newer['x-goformx-sensitive'] = ['/email', '/message', '/exactInteger'];
+  await schema.fill(stringify(newer));
+  await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
+  await owner.getByText('Saved draft version 3.', { exact: false }).waitFor();
+  await owner.getByRole('button', { name: 'Review publication' }).click();
+  await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
+  await owner.getByText('Version 3 published.', { exact: false }).waitFor();
+  await owner.getByRole('button', { name: 'Load submissions', exact: true }).click();
+  await owner.getByText('1 submissions · page 1', { exact: true }).waitFor();
+  await owner.locator('#submission-list button').first().click();
+  await owner.getByRole('heading', { name: 'Submission detail', exact: true }).waitFor();
+  const acceptedValues = await owner.locator('#submission-values').textContent();
+  assert.match(acceptedValues, /Original accepted integer/);
+  assert.match(acceptedValues, /9007199254740993/); assert.match(acceptedValues, /0\.1234567890123456789/);
+  assert.doesNotMatch(acceptedValues, /browser@example\.test|Synthetic browser gate|Newer integer label/);
+  assert.match(await owner.locator('#submission-schema').textContent(), /Original accepted integer/);
+  await owner.getByRole('textbox', { name: 'Accepted schema version', exact: true }).fill('2');
+  await owner.getByRole('button', { name: 'Apply submission filters', exact: true }).click();
+  await owner.getByText('1 submissions · page 1', { exact: true }).waitFor();
+  for (const format of ['json', 'csv']) {
+    const ready = owner.waitForEvent('download');
+    await owner.getByRole('button', { name: `Export ${format.toUpperCase()}`, exact: true }).click();
+    const download = await ready;
+    const chunks = []; for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+    const exported = Buffer.concat(chunks).toString();
+    assert.match(download.suggestedFilename(), new RegExp(`^goformx-submissions-[0-9a-f-]+\\.${format}$`));
+    assert.ok(exported.includes(submission.first.data.id));
+    assert.match(exported, /9007199254740993/); assert.match(exported, /0\.1234567890123456789/);
+    assert.doesNotMatch(exported, /browser@example\.test|Synthetic browser gate/);
+  }
+  assert.equal(owner.url(), url + '/app');
+  assert.deepEqual(await owner.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
+  const noCsrf = await owner.evaluate(async id => (await fetch(`/api/control-plane/forms/${id}/submissions/export`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{"format":"json"}',
+  })).status, owned.id);
+  assert.equal(noCsrf, 403);
   const foreign = await login(users[1]);
   await foreign.getByText('No forms here yet.', { exact: false }).waitFor();
   assert.equal(await foreign.getByRole('button', { name: /Browser release gate/ }).count(), 0);
   const denied = await foreign.evaluate(async id => (await fetch(`/api/control-plane/forms/${id}`)).status, owned.id);
   assert.equal(denied, 404); assert.deepEqual(leaked, []); assert.deepEqual(errors, []);
+  const deniedSubmissions = await foreign.evaluate(async ({ form, submission }) => {
+    const root = `/api/control-plane/forms/${form}/submissions`;
+    const headers = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '') };
+    const responses = await Promise.all([fetch(root), fetch(`${root}/${submission}`), fetch(`${root}/export`, { method: 'POST', headers, body: '{"format":"json"}' })]);
+    return responses.map(response => ({ status: response.status, attachment: response.headers.get('Content-Disposition') }));
+  }, { form: owned.id, submission: submission.first.data.id });
+  assert.deepEqual(deniedSubmissions, Array.from({ length: 3 }, () => ({ status: 404, attachment: null })));
 });

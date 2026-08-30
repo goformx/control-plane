@@ -48,6 +48,29 @@
         <p class="help">The public key is browser-safe. Never put a service token or first-party assertion in your website. Add the website’s origin above before embedding.</p>
         <pre><code id="integration-example"></code></pre><button id="copy-example" type="button" disabled>Copy JavaScript example</button>
       </section>
+      <section id="submissions-panel" class="panel" hidden aria-labelledby="submissions-heading">
+        <div class="section-heading"><h3 id="submissions-heading">Submissions</h3><button id="submission-load" type="button">Load submissions</button></div>
+        <p id="submission-access" class="help" hidden>Only workspace owners and admins can review submission data.</p>
+        <form id="submission-filters"><fieldset id="submission-filter-fields"><div class="two-columns">
+          <label>Received from (inclusive)<input name="receivedFrom" placeholder="2026-08-30T00:00:00Z" autocomplete="off"></label>
+          <label>Received before (exclusive)<input name="receivedBefore" placeholder="2026-08-31T00:00:00Z" autocomplete="off"></label>
+          <label>Accepted schema version<input name="schemaVersion" inputmode="numeric" autocomplete="off"></label>
+          <label>Acceptance status<select name="status"><option value="">All</option><option value="accepted">Accepted</option></select></label>
+        </div><p class="help">Use timestamps with an explicit timezone offset. Filters stay in this tab; Go validates their bounds.</p><button type="submit">Apply submission filters</button></fieldset></form>
+        <p id="submission-state" role="status"></p><p id="submission-error" role="alert" tabindex="-1" hidden></p>
+        <div id="submission-list" aria-label="Received submissions"></div>
+        <div class="pagination"><button id="submission-previous" type="button" disabled>Previous submissions</button><button id="submission-next" type="button" disabled>Next submissions</button></div>
+        <div class="actions"><button id="export-json" type="button" disabled>Export JSON</button><button id="export-csv" type="button" disabled>Export CSV</button></div>
+        <p class="help">Exports use the applied filters, not just this page. Maximum 1,000 rows / 8 MiB. CSV cells are text-prefixed for initial spreadsheet opening; edits and re-saves can remove that protection. Use JSON for exact machine-readable values.</p>
+        <p id="submission-message" role="status"></p>
+        <section id="submission-detail" hidden aria-labelledby="submission-detail-heading"><h3 id="submission-detail-heading" tabindex="-1">Submission detail</h3>
+          <dl id="submission-metadata"></dl><p id="submission-redactions" class="help"></p><dl id="submission-values"></dl>
+          <details><summary>Exact accepted JSON Schema</summary><pre id="submission-schema"></pre></details>
+          <h4>Recent webhook delivery history</h4><div id="submission-deliveries" role="status"></div>
+          <p class="help">Acceptance is not webhook delivery. This is a bounded recent form-level window, not complete historical delivery evidence. Replay is a separate privileged action and is not offered here.</p>
+        </section>
+        <p class="help">Content is cleared when this tab is hidden or the form changes. No submission content is stored locally or sent to AI.</p>
+      </section>
       <p class="help">Archive and delete are not exposed by the current API. This UI will not pretend to remove your form.</p>
       <p class="help"><a href="/assets/forms.LICENSE.txt">Editor third-party notices</a></p>
     </section>

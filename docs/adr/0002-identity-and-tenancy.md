@@ -51,7 +51,9 @@ organization header, or role header supplies authority. Revocation/demotion take
 effect on the next request.
 
 The control-plane routes mirror Go's list/detail/export paths under
-`/api/control-plane/forms/{formId}/submissions`. Export is POST and requires
+`/api/control-plane/forms/{formId}/submissions`, plus its bounded recent delivery
+read at `/api/control-plane/forms/{formId}/deliveries` (also `submissions:read`
+in the canonical API, not webhook-configuration access). Export is POST and requires
 session CSRF. Go owns strict cursor/filter/body validation, immutable accepted
 schema projection, redaction, resource bounds, and durable preparation audit.
 PHP preserves raw JSON numbers and repeated query/body fields for Go's validator,
@@ -69,5 +71,14 @@ headers, cookies, and credentials are not forwarded. Responses are no-store and
 nosniff. No payload is logged or persisted by this controller.
 
 This boundary targets Go development contract 1.2.0 and is not a production
-release claim. The submissions UI and real browser/cross-service release evidence
-remain part of GoFormX #122.
+release claim. The submissions UI renders actual redacted values with titles/types
+from the exact accepted schema, retaining arbitrary JSON and exact numbers. It
+does not apply defaults, fetch remote schema references, or reinterpret old data
+against the current version. Recent deliveries are matched by submission ID;
+absence from that bounded window never means no historical delivery occurred.
+
+The UI retains data and cursors only in memory, clears content when the form
+changes or the page becomes hidden, and rejects stale asynchronous results.
+Filters are never added to browser navigation/history. Exports use applied filters
+across the whole bounded result set, not merely the visible page. GoFormX #122
+requires live session-to-API tests for these boundaries before completion.

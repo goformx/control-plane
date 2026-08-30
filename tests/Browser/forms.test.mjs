@@ -14,7 +14,10 @@ async function fixture(t, options) {
   return { page, data: server.data };
 }
 async function openForm(page) { await page.getByRole('button', { name: /Contact us/ }).click(); await page.getByText('Viewing saved version 1', { exact: false }).waitFor(); }
-async function schemaText(page, value) { await page.getByRole('textbox', { name: 'JSON Schema editor' }).fill(value); }
+async function schemaText(page, value) {
+  const editor = page.getByRole('textbox', { name: 'JSON Schema editor' });
+  await editor.click(); await editor.press('ControlOrMeta+A'); await page.keyboard.insertText(value);
+}
 
 test('editor test reader includes off-screen lines without using the system clipboard', async t => {
   const { page } = await fixture(t, { populated: true }); await openForm(page);
