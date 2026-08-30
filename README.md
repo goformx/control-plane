@@ -31,6 +31,17 @@ validation authority. Form details and schema drafts save independently.
 See the [forms workflow](docs/forms-workflow.md) for creation, publication,
 AI/API integration, and recovery from conflicts or uncertain responses.
 
+Each saved form also has a submissions browser for owners/admins. It supports
+cursor pagination, received-time/status/schema-version filters, exact accepted
+schema detail, recent delivery metadata, and audited JSON/CSV downloads. Members
+cannot access submission content. Values remain lossless and are redacted by Go;
+the UI does not cache them in browser storage or send them to AI. Data is cleared
+when the page is hidden or the form changes. Export applies the last applied
+filters across at most 1,000 rows/8 MiB, not only the current page. JSON is the
+machine round-trip format; CSV uses text-prefixed cells and is not guaranteed safe
+after arbitrary spreadsheet edits or re-saves. Missing recent delivery entries
+do not establish that a submission was never delivered.
+
 The editor requires a current browser supporting native JSON source access and
 `JSON.rawJSON`; startup checks this before loading the workspace. Numeric
 constraints retain their original precision, special property names remain

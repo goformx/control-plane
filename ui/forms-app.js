@@ -2,6 +2,7 @@ import { EditorView, basicSetup } from 'codemirror';
 import { Compartment, EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
 import { requireJsonSupport } from './schema-json.js';
+import { initSubmissions } from './submissions-app.js';
 import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, parseSchema, parseJSON, stringify, publicEndpoints, starterSchema } from './forms-model.js';
 
 const $ = id => document.getElementById(id);
@@ -28,6 +29,7 @@ const dirty = () => !$('editor-panel').hidden && (schemaDirty() || metadataDirty
 const csrf = () => decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
 const publicOrigin = document.querySelector('meta[name="goformx-api-origin"]').content;
 const formPath = () => `/api/control-plane/forms/${encodeURIComponent(state.form.id)}`;
+const submissions = initSubmissions({ context: () => state, verifyWorkspace });
 
 function clearError() { $('error').hidden = true; text('error-message', ''); $('error-fields').replaceChildren(); $('sign-in').hidden = true; $('verify-email').hidden = true; }
 function showError(error) {
@@ -68,6 +70,9 @@ async function act(work) {
   finally { state.busy = false; controls(); }
 }
 function controls() {
+  submissions.controls();
+  $('review-submissions').hidden = !state.form;
+  $('review-submissions').disabled = !writable() || state.busy;
   const canWrite = writable() && !state.busy && !state.uncertain;
   $('new-form').disabled = !canWrite;
   $('metadata-fields').disabled = !canWrite;
@@ -172,6 +177,7 @@ function renderPublication() {
   $('copy-example').disabled = !live;
 }
 async function openForm(id) {
+  submissions.reset();
   const path = `/api/control-plane/forms/${encodeURIComponent(id)}`;
   // Commit the selected form only after its complete editable snapshot loads.
   // A failed read must not attach the previous form's schema to a new identity.
@@ -192,6 +198,7 @@ async function openForm(id) {
   await listForms();
 }
 function newForm() {
+  submissions.reset();
   state.form = null; state.version = null; state.versions = []; state.uncertain = false;
   fillMetadata({ allowedOrigins: [] }); setSchema(starterSchema());
   text('editor-heading', 'New form'); text('form-status', 'NOT SAVED'); text('save-schema', 'Validate & create form');
@@ -229,6 +236,7 @@ async function saveMetadata() {
 }
 
 $('new-form').onclick = () => { if (confirmDiscard()) { clearError(); newForm(); } };
+$('review-submissions').onclick = () => submissions.open();
 $('refresh').onclick = () => act(async () => { await verifyWorkspace(); await listForms(); });
 $('previous').onclick = () => act(async () => { state.offset -= PAGE_SIZE; await listForms(); });
 $('next').onclick = () => act(async () => { state.offset += PAGE_SIZE; await listForms(); });
