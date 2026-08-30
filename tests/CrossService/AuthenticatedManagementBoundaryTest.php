@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Tests\CrossService;
 
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\FormOperation;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
 use PHPUnit\Framework\TestCase;
 use Waaseyaa\Entity\EntityInterface;
@@ -12,6 +13,7 @@ use Waaseyaa\Entity\EntityTypeManagerInterface;
 use Waaseyaa\Foundation\Kernel\HttpKernel;
 use Waaseyaa\User\DevAdminAccount;
 use Waaseyaa\User\User;
+use Symfony\Component\Yaml\Yaml;
 
 /**
  * Cross-repository release gate for goformx/goformx#120.
@@ -45,6 +47,8 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
         $foreignEmail = 'foreign-' . bin2hex(random_bytes(6)) . '@example.test';
         $user = $this->createVerifiedUser($manager, 'Member', $email, $password);
         $foreignUser = $this->createVerifiedUser($manager, 'Foreign', $foreignEmail, $password);
+        $readerEmail = 'reader-' . bin2hex(random_bytes(6)) . '@example.test';
+        $reader = $this->createVerifiedUser($manager, 'Reader', $readerEmail, $password);
         $organizationIds = [];
 
         try {
@@ -91,6 +95,26 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
             self::assertStringContainsString($formId, $afterDeniedSwitch['body']);
             self::assertStringNotContainsString($foreignFormId, $afterDeniedSwitch['body']);
 
+            $this->exerciseFormWorkflow($uiUrl, $cookies, $foreignCookies, $organizationId, $foreignOrganizationId);
+            $membership = $manager->getRepository('goformx_organization_membership')->create([
+                'organization_uuid' => $organizationId, 'user_id' => (int) $reader->id(), 'role' => 'member',
+            ]);
+            $manager->getRepository('goformx_organization_membership')->save($membership);
+            $readerCookies = $this->login($uiUrl, $readerEmail, $password);
+            self::assertSame(200, $this->browserRequest($uiUrl, 'GET', '/api/control-plane/forms', $readerCookies)['status']);
+            $publish = '/api/control-plane/forms/' . $formId . '/versions/1/publish';
+            self::assertSame(403, $this->browserRequest($uiUrl, 'POST', $publish, $readerCookies, [], ['X-Role: owner'])['status']);
+            // The same live session observes promotions, demotions, and revoked membership.
+            $membership->set('role', 'admin');
+            $manager->getRepository('goformx_organization_membership')->save($membership);
+            self::assertSame(200, $this->browserRequest($uiUrl, 'POST', $publish, $readerCookies, [])['status']);
+            $membership->set('role', 'member');
+            $manager->getRepository('goformx_organization_membership')->save($membership);
+            self::assertSame(403, $this->browserRequest($uiUrl, 'POST', $publish, $readerCookies, [])['status']);
+            $membership->set('status', 'revoked');
+            $manager->getRepository('goformx_organization_membership')->save($membership);
+            self::assertSame(403, $this->browserRequest($uiUrl, 'GET', '/api/control-plane/forms/' . $formId, $readerCookies)['status']);
+
             $traceId = $browserResponse['headers']['x-trace-id'] ?? '';
             self::assertMatchesRegularExpression('/\A[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\z/i', $traceId);
             $apiLog = $this->awaitLogEvidence($apiLogPath, $traceId);
@@ -112,8 +136,89 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
             }
             $manager->getRepository('user')->delete($user);
             $manager->getRepository('user')->delete($foreignUser);
+            // A revoked account may lazily acquire a new personal workspace before
+            // refusing the previously selected organization. Remove that fixture too.
+            $readerMemberships = $manager->getRepository('goformx_organization_membership');
+            $ids = $readerMemberships->getQuery()->accessCheck(false)->condition('user_id', (int) $reader->id())->execute();
+            foreach ($readerMemberships->findMany($ids) as $remaining) {
+                $this->deleteMatching($manager, 'goformx_organization', 'uuid', (string) $remaining->get('organization_uuid'));
+                $readerMemberships->delete($remaining);
+            }
+            $manager->getRepository('user')->delete($reader);
             $accountContext->set(null);
         }
+    }
+
+    public function testFormOperationScopesMatchThePinnedCanonicalOpenApi(): void
+    {
+        $path = getenv('GOFORMX_CONTRACT_PATH') ?: dirname(__DIR__, 2) . '/.ci/goformx/goforms/contracts/openapi.v1.yaml';
+        self::assertFileExists($path);
+        $contract = Yaml::parseFile($path);
+        $expected = [];
+        foreach ($contract['paths'] as $path => $methods) {
+            if (preg_match('~\A/v1/forms(?:/\{formId\}(?:/versions(?:/\{version\}(?:/publish)?)?)?)?\z~', $path) !== 1) {
+                continue;
+            }
+            foreach ($methods as $method => $specification) {
+                if (isset($specification['operationId'])) {
+                    $expected[strtoupper($method) . ' ' . $path] = $specification['x-goformx-required-scopes'];
+                }
+            }
+        }
+        $actual = [];
+        foreach (FormOperation::cases() as $operation) {
+            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->scope()->value];
+        }
+        ksort($expected);
+        ksort($actual);
+        self::assertCount(8, $expected);
+        self::assertSame($expected, $actual);
+    }
+
+    /** @param array<string, string> $cookies @param array<string, string> $foreignCookies */
+    private function exerciseFormWorkflow(string $url, array &$cookies, array &$foreignCookies, string $organization, string $foreign): void
+    {
+        $schema = ['$schema' => 'https://json-schema.org/draft/2020-12/schema', 'type' => 'object',
+            'properties' => ['message' => ['type' => 'string'], 'anything' => new \stdClass()]];
+        $input = ['name' => 'browser-' . bin2hex(random_bytes(6)), 'title' => 'Browser workflow', 'schema' => $schema];
+        $withoutCsrf = $cookies;
+        unset($withoutCsrf['XSRF-TOKEN']);
+        self::assertSame(403, $this->browserRequest($url, 'POST', '/api/control-plane/forms', $withoutCsrf, $input)['status']);
+        $created = $this->browserRequest($url, 'POST', '/api/control-plane/forms?organization_id=' . $foreign, $cookies, $input);
+        self::assertSame(201, $created['status'], $created['body']);
+        $form = json_decode($created['body'], true, 32, JSON_THROW_ON_ERROR)['data'];
+        self::assertSame($organization, $form['organizationId']);
+        self::assertSame('draft', $form['status']);
+        $path = '/api/control-plane/forms/' . $form['id'];
+        $detail = $this->browserRequest($url, 'GET', $path, $cookies);
+        self::assertSame(200, $detail['status']);
+        $etag = $detail['headers']['etag'];
+        self::assertSame(428, $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Updated title'])['status']);
+        $updated = $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Updated title'], ['If-Match: ' . $etag]);
+        self::assertSame(200, $updated['status'], $updated['body']);
+        self::assertNotSame($etag, $updated['headers']['etag']);
+        self::assertSame(412, $this->browserRequest($url, 'PATCH', $path, $cookies, ['title' => 'Stale overwrite'], ['If-Match: ' . $etag])['status']);
+        $invalid = $this->browserRequest($url, 'POST', $path . '/versions', $cookies, ['schema' => ['type' => 'array']]);
+        self::assertSame(422, $invalid['status']);
+        self::assertStringContainsString('/schema', $invalid['body']);
+        $schema['properties']['message']['minLength'] = 3;
+        $version = $this->browserRequest($url, 'POST', $path . '/versions', $cookies, ['schema' => $schema]);
+        self::assertSame(201, $version['status'], $version['body']);
+        self::assertSame(2, json_decode($version['body'], true, 32, JSON_THROW_ON_ERROR)['data']['version']);
+        $versions = $this->browserRequest($url, 'GET', $path . '/versions', $cookies);
+        self::assertSame(200, $versions['status']);
+        self::assertCount(2, json_decode($versions['body'], true, 32, JSON_THROW_ON_ERROR)['data']);
+        $published = $this->browserRequest($url, 'POST', $path . '/versions/2/publish', $cookies, []);
+        self::assertSame(200, $published['status'], $published['body']);
+        self::assertSame('published', json_decode($published['body'], true, 32, JSON_THROW_ON_ERROR)['data']['state']);
+        $original = $this->browserRequest($url, 'GET', $path . '/versions/1', $cookies);
+        self::assertSame(200, $original['status']);
+        $originalSchema = json_decode($original['body'], false, 32, JSON_THROW_ON_ERROR)->data->schema;
+        self::assertInstanceOf(\stdClass::class, $originalSchema->properties->anything);
+        self::assertObjectNotHasProperty('minLength', $originalSchema->properties->message);
+        self::assertSame(404, $this->browserRequest($url, 'GET', $path, $foreignCookies)['status']);
+        self::assertSame(404, $this->browserRequest($url, 'POST', $path . '/versions/1/publish', $foreignCookies, [])['status']);
+        self::assertDoesNotMatchRegularExpression($this->compactJwsPattern(), $published['body']);
     }
 
     private function createVerifiedUser(EntityTypeManagerInterface $manager, string $name, string $email, string $password): User
@@ -181,7 +286,7 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
      * @param array<string, mixed>|null $body
      * @return array{status: int, headers: array<string, string>, body: string}
      */
-    private function browserRequest(string $baseUrl, string $method, string $path, array &$cookies, ?array $body = null): array
+    private function browserRequest(string $baseUrl, string $method, string $path, array &$cookies, ?array $body = null, array $extraHeaders = []): array
     {
         $headers = ['Accept: application/json'];
         if ($cookies !== []) {
@@ -192,9 +297,10 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
             ));
         }
         if ($body !== null) {
-            $headers[] = 'Content-Type: application/json';
+            $headers[] = 'Content-Type: ' . ($method === 'PATCH' ? 'application/merge-patch+json' : 'application/json');
             $headers[] = 'X-XSRF-TOKEN: ' . rawurldecode($cookies['XSRF-TOKEN'] ?? '');
         }
+        $headers = [...$headers, ...$extraHeaders];
         $stream = fopen($baseUrl . $path, 'rb', false, stream_context_create(['http' => [
             'method' => $method,
             'header' => implode("\r\n", $headers),

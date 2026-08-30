@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\GoFormX;
 
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\EntityTag;
 use Waaseyaa\HttpClient\HttpClientInterface;
 use Waaseyaa\HttpClient\HttpResponse;
 
@@ -41,17 +42,28 @@ final readonly class ManagementApiClient implements ManagementApiClientInterface
         array $scopes,
         array|string|null $body = null,
         ?string $requestId = null,
+        ?string $ifMatch = null,
     ): HttpResponse {
         if (preg_match('#\A/v1(?:/|\z)#', $path) !== 1 || str_contains($path, '..') ||
             preg_match('/[\x00-\x1f\x7f#]/', $path) === 1) {
             throw new \InvalidArgumentException('Management API paths must remain under /v1.');
         }
+        if ($ifMatch !== null && !EntityTag::isStrong($ifMatch)) {
+            throw new \InvalidArgumentException('If-Match must contain one bounded strong entity tag.');
+        }
         $issued = $this->assertions->issue($subjectId, $organizationId, $scopes, $requestId);
 
-        return $this->transport->request(strtoupper($method), $this->baseUrl . $path, [
+        $headers = [
             'Accept' => 'application/json',
             'Authorization' => 'Bearer ' . $issued->compact,
             'X-Trace-Id' => $issued->requestId,
-        ], $body);
+        ];
+        if ($body !== null) {
+            $headers['Content-Type'] = strtoupper($method) === 'PATCH' ? 'application/merge-patch+json' : 'application/json';
+        }
+        if ($ifMatch !== null) {
+            $headers['If-Match'] = $ifMatch;
+        }
+        return $this->transport->request(strtoupper($method), $this->baseUrl . $path, $headers, $body);
     }
 }

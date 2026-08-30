@@ -32,3 +32,11 @@ The authenticated management boundary is:
 Every mutation requires an authenticated session and a matching `X-XSRF-TOKEN`. Entity lifecycle auditing records organization and membership changes with the acting account. No route issues, accepts, or returns a GoFormX data-plane credential.
 
 Personal-workspace creation is deliberately lazy at the first verified context request rather than a best-effort email-verification side effect. The unique membership constraint makes retries idempotent, and the service removes an organization if its initial owner grant cannot be saved, so a transient write failure cannot leave an ownerless workspace.
+
+## Form-operation authorization
+
+For the initial forms workflow, an active `member` can list/read forms and their immutable schema versions. Active `owner` and `admin` memberships may also create forms, update metadata, create new immutable versions, and explicitly publish a selected version. This is application policy, not a framework Groups permission or an inference from an authentication role. It does not grant token, webhook, submission, membership-administration, or account-deletion capabilities; those have separate policies and gates.
+
+`FormOperation` binds each supported form operation to its canonical method, resource path, and single required scope. The production route provider and forms controller use that binding. Every request resolves membership again, checks the operation against the current organization role, and only then calls the server-side credential client. Browser-selected organization IDs, role headers, and credentials do not authorize the call. A demotion or membership revocation must take effect on the next request without requiring sign-out.
+
+All browser mutations require the existing session CSRF token, including explicit publication. Metadata updates carry a single strong `If-Match` ETag; missing preconditions return `428`, and stale preconditions retain Go's `412`. PHP preserves JSON request bytes (including empty schema objects) and passes Go's structured validation errors back without introducing a second schema validator. These endpoints are the browser workflow boundary, not a claim that the editor UI or production self-service gate is complete.

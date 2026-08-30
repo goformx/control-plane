@@ -121,6 +121,7 @@ final class FormsClientStub implements ManagementApiClientInterface
         array $scopes,
         array|string|null $body = null,
         ?string $requestId = null,
+        ?string $ifMatch = null,
     ): HttpResponse {
         $this->path = $path;
         $this->subjectId = $subjectId;
