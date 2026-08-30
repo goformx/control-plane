@@ -65,7 +65,7 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.locator('#error-fields li').first().waitFor();
   assert.equal(await schema.innerText(), invalid, 'Go validation failure retains the editable schema');
-  await schema.fill(JSON.stringify({ ...original, properties: { ...original.properties, unconstrained: {} } }));
+  await schema.fill(JSON.stringify({ ...original, properties: { ...original.properties, unconstrained: {}, ['__proto__']: { type: 'string' } } }));
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.getByText('Saved draft version 2.', { exact: false }).waitFor();
   await owner.getByLabel('Saved versions').selectOption('1');
@@ -73,6 +73,7 @@ test('real browser login → create → version → publish → public submissio
   assert.deepEqual(JSON.parse(await schema.innerText()), original);
   await owner.getByLabel('Saved versions').selectOption('2');
   await owner.getByText('Viewing saved version 2', { exact: false }).waitFor();
+  assert.deepEqual(JSON.parse(await schema.innerText()).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
   await owner.getByRole('button', { name: 'Review publication' }).click();
   await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
   await owner.getByText('Version 2 published.', { exact: false }).waitFor();

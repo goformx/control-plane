@@ -14,6 +14,7 @@ if (!$database || !is_file($database) || realpath($database) === realpath($root 
 require $root . '/vendor/autoload.php';
 
 use Waaseyaa\Foundation\Kernel\HttpKernel;
+use Waaseyaa\Access\User\UserInternalFieldReaderInterface;
 use Waaseyaa\User\DevAdminAccount;
 use Waaseyaa\User\User;
 
@@ -41,10 +42,12 @@ try {
         // Private pipe only; the test must not print credentials or retain browser storage.
         fwrite(STDOUT, json_encode($result, JSON_THROW_ON_ERROR));
     } elseif ($input['action'] === 'cleanup') {
+        $internalFields = $kernel->getHttpServiceResolver()->resolve(UserInternalFieldReaderInterface::class);
+        if (!$internalFields instanceof UserInternalFieldReaderInterface) throw new RuntimeException('Fixture identity reader unavailable.');
         foreach ($input['users'] as $fixture) {
             $stage = 'load-user';
             $user = $users->find((string) $fixture['id']);
-            if (!$user instanceof User || !hash_equals($user->uuid(), $fixture['subject']) || !str_starts_with((string) $user->get('mail'), 'browser-ui-')) {
+            if (!$user instanceof User || !hash_equals($user->uuid(), $fixture['subject']) || !str_starts_with($internalFields->sessionIdentity($user)->mail, 'browser-ui-')) {
                 throw new RuntimeException('Fixture identity mismatch.');
             }
             $memberships = $manager->getRepository('goformx_organization_membership');

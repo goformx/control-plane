@@ -156,3 +156,19 @@ test('failed form switch preserves one coherent identity, metadata and schema sn
   assert.deepEqual(writes.map(request => request.path), [`/api/control-plane/forms/${FORM_ID}/versions`]);
   assert.deepEqual(data.versions[1].schema, JSON.parse(draft));
 });
+
+test('format and save preserve special property names, object annotations and precise constraints', async t => {
+  const { page, data } = await fixture(t, { populated: true }); await openForm(page);
+  const source = '{"type":"object","properties":{"__proto__":{"type":"string"},"value":{"minimum":9007199254740993}},"default":{"isLosslessNumber":true,"value":"not a number"}}';
+  await schemaText(page, source);
+  await page.getByRole('button', { name: 'Format JSON', exact: true }).click();
+  const formatted = await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText();
+  assert.match(formatted, /9007199254740993/);
+  assert.equal(Object.hasOwn(JSON.parse(formatted).properties, '__proto__'), true);
+  await page.getByRole('button', { name: 'Validate & save new draft' }).click();
+  await page.getByText('Saved draft version 2.', { exact: false }).waitFor();
+  const write = data.requests.find(request => request.method === 'POST' && request.path.endsWith('/versions'));
+  assert.match(write.raw, /9007199254740993/);
+  assert.deepEqual(write.body.schema.default, { isLosslessNumber: true, value: 'not a number' });
+  assert.deepEqual(write.body.schema.properties.__proto__, { type: 'string' });
+});
