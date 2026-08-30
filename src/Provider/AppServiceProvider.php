@@ -150,7 +150,8 @@ final class AppServiceProvider extends ServiceProvider
         );
         foreach (FormOperation::cases() as $operation) {
             $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))
-                ->controller(fn(Request $request) => $this->resolve(ManagementFormsController::class)->handle($request, $operation))
+                // The dispatcher also forwards named path parameters; the controller validates their request attributes.
+                ->controller(fn(Request $request, string ...$routeParameters) => $this->resolve(ManagementFormsController::class)->handle($request, $operation))
                 ->requireAuthentication()
                 ->methods($operation->method());
             if ($operation->method() !== 'GET') {
