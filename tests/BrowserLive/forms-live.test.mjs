@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
 import { parseJSON, stringify } from '../../ui/schema-json.js';
+import { readSchemaEditor } from '../helpers/editor.mjs';
 
 test('real browser login → create → version → publish → public submission, with foreign workspace denial', { timeout: 90000 }, async t => {
   assert.equal(process.env.GOFORMX_BROWSER_REHEARSAL, '1');
@@ -60,12 +61,12 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByRole('button', { name: 'Validate & create form' }).click();
   await owner.getByText('Form created as a draft.', { exact: false }).waitFor();
   const schema = owner.getByRole('textbox', { name: 'JSON Schema editor' });
-  const original = JSON.parse(await schema.innerText());
+  const original = JSON.parse(await readSchemaEditor(owner));
   const invalid = JSON.stringify({ ...original, type: 'array' });
   await schema.fill(invalid);
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.locator('#error-fields li').first().waitFor();
-  assert.equal(await schema.innerText(), invalid, 'Go validation failure retains the editable schema');
+  assert.equal(await readSchemaEditor(owner), invalid, 'Go validation failure retains the editable schema');
   const revised = { ...original, properties: { ...original.properties, unconstrained: {}, ['__proto__']: { type: 'string' } } };
   revised.properties.exactInteger = parseJSON('{"type":"integer","minimum":9007199254740993}');
   revised.properties.exactDecimal = parseJSON('{"type":"number","minimum":0.1234567890123456789}');
@@ -77,11 +78,11 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByText('Saved draft version 2.', { exact: false }).waitFor();
   await owner.getByLabel('Saved versions').selectOption('1');
   await owner.getByText('Viewing saved version 1', { exact: false }).waitFor();
-  assert.deepEqual(JSON.parse(await schema.innerText()), original);
+  assert.deepEqual(JSON.parse(await readSchemaEditor(owner)), original);
   await owner.getByLabel('Saved versions').selectOption('2');
   await owner.getByText('Viewing saved version 2', { exact: false }).waitFor();
-  assert.deepEqual(JSON.parse(await schema.innerText()).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
-  const readback = await schema.innerText();
+  const readback = await readSchemaEditor(owner);
+  assert.deepEqual(JSON.parse(readback).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
   assert.match(readback, /"minimum":\s*9007199254740993/, 'Saved integer constraint must not be rounded');
   assert.match(readback, /"minimum":\s*0\.1234567890123456789/, 'Saved decimal constraint must not be rounded');
   await owner.getByRole('button', { name: 'Review publication' }).click();

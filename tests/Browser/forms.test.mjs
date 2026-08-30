@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
 import { startServer, FORM_ID } from './fixtures/server.mjs';
+import { readSchemaEditor } from '../helpers/editor.mjs';
 
 async function fixture(t, options) {
   const server = await startServer(options); const browser = await chromium.launch();
@@ -14,6 +15,14 @@ async function fixture(t, options) {
 }
 async function openForm(page) { await page.getByRole('button', { name: /Contact us/ }).click(); await page.getByText('Viewing saved version 1', { exact: false }).waitFor(); }
 async function schemaText(page, value) { await page.getByRole('textbox', { name: 'JSON Schema editor' }).fill(value); }
+
+test('editor test reader includes off-screen lines without using the system clipboard', async t => {
+  const { page } = await fixture(t, { populated: true }); await openForm(page);
+  const source = JSON.stringify({ type: 'object', properties: Object.fromEntries(Array.from({ length: 400 }, (_, i) => [`field${i}`, { type: 'string' }])) }, null, 2);
+  await schemaText(page, source);
+  assert.equal(await readSchemaEditor(page), source);
+  assert.equal(await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText() === source, false, 'Fixture must actually exceed the virtual DOM viewport');
+});
 
 test('rendered create, guided field, save, immutable versions, explicit publication and public example', async t => {
   const { page, data } = await fixture(t);
