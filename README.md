@@ -38,6 +38,10 @@ the Linux CI gate runs the full command.
 
 The separate cross-service workflow additionally runs `npm run test:live`
 against real Waaseyaa sessions, Go HTTP handlers and disposable PostgreSQL.
+The HTTP/custody and browser rehearsals use separate disposable environments,
+so their loopback traffic does not share the framework's persistent per-IP
+rate-limit budget. Both must pass the `authenticated-boundary` gate; production
+rate limits remain enabled and unchanged.
 Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,
 or raw credential-adjacent logs are published as test artifacts.

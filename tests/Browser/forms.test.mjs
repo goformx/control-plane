@@ -132,3 +132,27 @@ test('acknowledged creation followed by failed reload cannot repeat form creatio
   await page.getByRole('textbox', { name: 'JSON Schema editor' }).focus(); await page.keyboard.press('ControlOrMeta+z');
   assert.doesNotMatch(await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText(), /privateDraft/);
 });
+
+test('failed form switch preserves one coherent identity, metadata and schema snapshot', async t => {
+  const { page, data } = await fixture(t, { populated: true }); await openForm(page);
+  const secondId = '33333333-3333-4333-8333-333333333333';
+  const second = { ...data.forms[0], id: secondId, name: 'second', title: 'Second form' };
+  data.forms.push(second);
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByRole('button', { name: /Second form/ }).waitFor();
+  const draft = '{"type":"object","properties":{"privateDraft":{}}}';
+  await schemaText(page, draft);
+  await page.route(`**/api/control-plane/forms/${secondId}`, route => route.fulfill({ json: { data: second }, headers: { ETag: '"second"' } }));
+  await page.route(`**/api/control-plane/forms/${secondId}/versions?*`, route => route.fulfill({ status: 503, json: { error: { message: 'Second schema unavailable' } } }));
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: /Second form/ }).click();
+  await page.getByText('Second schema unavailable', { exact: true }).waitFor();
+  assert.equal(await page.locator('#editor-heading').textContent(), 'Contact us');
+  assert.equal(await page.locator('#form-name').inputValue(), 'contact');
+  assert.equal(await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText(), draft);
+  await page.getByRole('button', { name: 'Validate & save new draft' }).click();
+  await page.getByText('Saved draft version 2.', { exact: false }).waitFor();
+  const writes = data.requests.filter(request => request.method === 'POST');
+  assert.deepEqual(writes.map(request => request.path), [`/api/control-plane/forms/${FORM_ID}/versions`]);
+  assert.deepEqual(data.versions[1].schema, JSON.parse(draft));
+});

@@ -8,9 +8,16 @@ permissions:
   contents: read
 
 jobs:
-  authenticated-boundary:
+  boundary-rehearsal:
+    name: boundary (${{ matrix.suite }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Persistent per-IP rate limits are real security state. Each rehearsal
+    # gets its own databases and servers instead of consuming another's budget.
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [http, browser]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -74,12 +81,15 @@ jobs:
           php vendor/bin/waaseyaa install:init
 
       - name: Set up the pinned browser test runtime
+        if: matrix.suite == 'browser'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+        if: matrix.suite == 'browser'
       - run: npx --no-install playwright install --with-deps chromium
+        if: matrix.suite == 'browser'
 
       - name: Generate ephemeral assertion custody
         run: |
@@ -145,14 +155,17 @@ jobs:
           exit 1
 
       - name: Exercise the authenticated browser-to-data-plane boundary
+        if: matrix.suite == 'http'
         run: php vendor/bin/phpunit tests/CrossService/AuthenticatedManagementBoundaryTest.php --no-coverage
 
       - name: Exercise the rendered human workflow against both real services
+        if: matrix.suite == 'browser'
         env:
           GOFORMX_BROWSER_REHEARSAL: '1'
         run: npm run test:live
 
       - name: Rehearse configured custody rotation and real process recovery
+        if: matrix.suite == 'http'
         env:
           GOFORMX_CUSTODY_REHEARSAL: '1'
         run: |
@@ -169,3 +182,14 @@ jobs:
           if [[ -n "${GOFORMX_UI_PID:-}" ]]; then
             kill "$GOFORMX_UI_PID" 2>/dev/null || true
           fi
+
+  authenticated-boundary:
+    # Preserve the required-check name; both real-service rehearsals must pass.
+    needs: boundary-rehearsal
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every boundary rehearsal
+        env:
+          REHEARSAL_RESULT: ${{ needs.boundary-rehearsal.result }}
+        run: test "$REHEARSAL_RESULT" = success

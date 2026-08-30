@@ -143,6 +143,9 @@ async function loadVersions(append = false) {
   const result = await api(`${formPath()}/versions?limit=25&offset=${offset}`);
   state.versions = append ? [...state.versions, ...result.data] : result.data;
   state.totalVersions = result.meta.total;
+  renderVersions();
+}
+function renderVersions() {
   $('versions').replaceChildren();
   for (const version of state.versions) { const option = document.createElement('option'); option.value = version.version; option.textContent = `Version ${version.version} · ${version.state}`; $('versions').append(option); }
   $('more-versions').hidden = state.versions.length >= state.totalVersions || state.versions.length > 10000;
@@ -168,14 +171,22 @@ function renderPublication() {
   $('copy-example').disabled = !live;
 }
 async function openForm(id) {
-  const result = await api(`/api/control-plane/forms/${encodeURIComponent(id)}`);
-  state.form = { ...result.data, etag: result.etag }; state.version = null; state.versions = [];
-  state.uncertain = false; fillMetadata(state.form);
+  const path = `/api/control-plane/forms/${encodeURIComponent(id)}`;
+  // Commit the selected form only after its complete editable snapshot loads.
+  // A failed read must not attach the previous form's schema to a new identity.
+  const result = await api(path);
+  const versions = await api(`${path}/versions?limit=${PAGE_SIZE}&offset=0`);
+  if (!versions.data.length) throw new Error('No schema versions returned. Reload before editing.');
+  const number = Math.max(...versions.data.map(version => version.version));
+  const selected = await api(`${path}/versions/${number}`);
+  state.form = { ...result.data, etag: result.etag }; state.version = selected.data;
+  state.versions = versions.data; state.totalVersions = versions.meta.total;
+  state.uncertain = false; fillMetadata(state.form); setSchema(state.version.schema);
   text('editor-heading', state.form.title); text('save-schema', 'Validate & save new draft');
   $('reload-form').hidden = false; reveal();
-  await loadVersions();
-  if (!state.versions.length) throw new Error('No schema versions returned. Reload before editing.');
-  await selectVersion(Math.max(...state.versions.map(version => version.version)));
+  renderVersions();
+  text('version-note', `Viewing saved version ${number} (${state.version.state}). Every saved snapshot is immutable; editing and saving creates a new draft version.`);
+  renderPublication();
   if (!Array.isArray(state.form.allowedOrigins)) throw new Error('This server does not expose allowed origins (contract 1.1.0 required). Details editing is disabled; do not assume the allowlist is empty.');
   await listForms();
 }
