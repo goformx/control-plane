@@ -122,6 +122,7 @@ final class FormsClientStub implements ManagementApiClientInterface
         array|string|null $body = null,
         ?string $requestId = null,
         ?string $ifMatch = null,
+        \App\Domain\GoFormX\RequestMediaType $mediaType = \App\Domain\GoFormX\RequestMediaType::Json,
     ): HttpResponse {
         $this->path = $path;
         $this->subjectId = $subjectId;

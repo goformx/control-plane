@@ -3,6 +3,7 @@ import { Compartment, EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
 import { requireJsonSupport } from './schema-json.js';
 import { initSubmissions } from './submissions-app.js';
+import { initIntegrations } from './integrations-app.js';
 import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, parseSchema, parseJSON, stringify, publicEndpoints, starterSchema } from './forms-model.js';
 
 const $ = id => document.getElementById(id);
@@ -30,6 +31,7 @@ const csrf = () => decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKE
 const publicOrigin = document.querySelector('meta[name="goformx-api-origin"]').content;
 const formPath = () => `/api/control-plane/forms/${encodeURIComponent(state.form.id)}`;
 const submissions = initSubmissions({ context: () => state, verifyWorkspace });
+const integrations = initIntegrations({ context: () => state, verifyWorkspace });
 
 function clearError() { $('error').hidden = true; text('error-message', ''); $('error-fields').replaceChildren(); $('sign-in').hidden = true; $('verify-email').hidden = true; }
 function showError(error) {
@@ -71,6 +73,7 @@ async function act(work) {
 }
 function controls() {
   submissions.controls();
+  integrations.controls();
   $('review-submissions').hidden = !state.form;
   $('review-submissions').disabled = !writable() || state.busy;
   const canWrite = writable() && !state.busy && !state.uncertain;
@@ -178,6 +181,7 @@ function renderPublication() {
 }
 async function openForm(id) {
   submissions.reset();
+  integrations.reset();
   const path = `/api/control-plane/forms/${encodeURIComponent(id)}`;
   // Commit the selected form only after its complete editable snapshot loads.
   // A failed read must not attach the previous form's schema to a new identity.
@@ -199,6 +203,7 @@ async function openForm(id) {
 }
 function newForm() {
   submissions.reset();
+  integrations.reset();
   state.form = null; state.version = null; state.versions = []; state.uncertain = false;
   fillMetadata({ allowedOrigins: [] }); setSchema(starterSchema());
   text('editor-heading', 'New form'); text('form-status', 'NOT SAVED'); text('save-schema', 'Validate & create form');
@@ -259,7 +264,7 @@ $('confirm-publish').onclick = () => act(async () => {
   text('notice', `Version ${number} published. Integration example now targets the live version.`);
 });
 $('copy-example').onclick = () => act(async () => { await navigator.clipboard.writeText($('integration-example').textContent); text('notice', 'Public integration example copied. Replace the data with your schema fields.'); });
-$('logout').onclick = () => { if (confirmDiscard()) act(async () => { await api('/api/auth/logout', { method: 'POST' }); state.schemaBaseline = schemaText(); state.metadataBaseline = metadataSnapshot(); location.assign('/'); }); };
+$('logout').onclick = () => { if (confirmDiscard()) { integrations.reset(); act(async () => { await api('/api/auth/logout', { method: 'POST' }); state.schemaBaseline = schemaText(); state.metadataBaseline = metadataSnapshot(); location.assign('/'); }); } };
 window.addEventListener('beforeunload', event => { if (dirty()) { event.preventDefault(); event.returnValue = ''; } });
 document.querySelector('.brand').onclick = event => { if (!confirmDiscard()) event.preventDefault(); };
 await act(async () => { requireJsonSupport(); await verifyWorkspace(); await listForms(); });

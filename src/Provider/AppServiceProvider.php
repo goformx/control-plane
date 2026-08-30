@@ -9,6 +9,8 @@ use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
 use App\Controller\ManagementFormsController;
 use App\Controller\ManagementSubmissionsController;
+use App\Controller\ManagementIntegrationsController;
+use App\Domain\GoFormX\IntegrationOperation;
 use App\Controller\OrganizationContextController;
 use App\Domain\GoFormX\FormOperation;
 use App\Domain\GoFormX\SubmissionOperation;
@@ -103,6 +105,10 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(FirstPartyJwksController::class, fn() => new FirstPartyJwksController(
             fn(): JwksDocument => $this->resolve(JwksDocument::class),
         ));
+        $this->singleton(ManagementIntegrationsController::class, fn() => new ManagementIntegrationsController(
+            $this->resolve(OrganizationRequestContextResolverInterface::class),
+            $this->resolve(ManagementApiClientInterface::class),
+        ));
     }
 
     public function boot(): void
@@ -178,6 +184,13 @@ final class AppServiceProvider extends ServiceProvider
                 $builder->requireCsrf();
             }
             $router->addRoute('goformx.management.submissions.' . $operation->value, $builder->build());
+        }
+        foreach (IntegrationOperation::cases() as $operation) {
+            $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))
+                ->controller(fn(Request $request, string ...$routeParameters) => $this->resolve(ManagementIntegrationsController::class)->handle($request, $operation))
+                ->requireAuthentication()->methods($operation->method());
+            if ($operation->method() !== 'GET') { $builder->requireCsrf(); }
+            $router->addRoute('goformx.management.integrations.' . $operation->value, $builder->build());
         }
         $router->addRoute(
             'goformx.context.switch',

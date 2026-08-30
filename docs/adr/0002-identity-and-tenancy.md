@@ -29,7 +29,7 @@ The authenticated management boundary is:
 - `POST /api/control-plane/organizations/leave` revokes membership, but refuses to orphan an organization whose only owner is leaving.
 - `DELETE /api/control-plane/account` revokes memberships before deleting the user and refuses deletion while the user solely owns an organization.
 
-Every mutation requires an authenticated session and a matching `X-XSRF-TOKEN`. Entity lifecycle auditing records organization and membership changes with the acting account. No route issues, accepts, or returns a GoFormX data-plane credential.
+Every mutation requires an authenticated session and a matching `X-XSRF-TOKEN`. Entity lifecycle auditing records organization and membership changes with the acting account. These context/account routes do not issue, accept, or return a GoFormX data-plane credential.
 
 Personal-workspace creation is deliberately lazy at the first verified context request rather than a best-effort email-verification side effect. The unique membership constraint makes retries idempotent, and the service removes an organization if its initial owner grant cannot be saved, so a transient write failure cannot leave an ownerless workspace.
 
@@ -82,3 +82,44 @@ changes or the page becomes hidden, and rejects stale asynchronous results.
 Filters are never added to browser navigation/history. Exports use applied filters
 across the whole bounded result set, not merely the visible page. GoFormX #122
 requires live session-to-API tests for these boundaries before completion.
+
+## Integration operations and one-time provisioning
+
+Active owners and admins may list/create/revoke external service tokens and
+read/configure/pause/resume/rotate/delete webhooks or replay a dead-letter delivery.
+Members may not perform these operations. `IntegrationOperation` owns this policy,
+the route/method and required scope. Every call resolves live membership, and every
+mutation requires session CSRF. Browser credential, role and organization headers
+are not authority. Go checks resource ownership again.
+
+Token creation is delegation, not a blanket privileged assertion. The server
+validates the selected scopes against the canonical enum, rejects duplicates and
+unknown scopes, and signs only `tokens:write` plus the selected scopes. Go remains
+the authority for token validation, persistence, audit, expiry and revocation.
+`tokens:write` is an explicitly selectable powerful scope: integrations holding it
+can mint/revoke tokens within their own authority. Admins share this integration
+authority with owners; this does not grant application membership administration.
+
+The sole browser credential exception is the freshly created external token from
+that explicit creation request. A typed projection validates its format, lookup
+ID, organization and active metadata. Only this operation can return a `token`
+field; metadata reads cannot recover it. Responses are no-store/no-cache/nosniff
+and forward no arbitrary upstream headers or error bodies. PHP does not persist
+token values, destination paths, custom headers or signing secrets. The control
+plane's assertion and signing custody never cross into the browser.
+
+The UI requires acknowledging the one-time copy/download warning before creation,
+and removes the reveal on dismissal, page hiding/navigation, form change and a
+two-minute timeout. It uses neither browser storage nor telemetry. Copy/download
+are explicit actions; clipboard managers and downloaded files are outside the
+application's deletion control. An interrupted creation is an uncertain outcome,
+not permission to automatically issue another token. Reload metadata, revoke any
+unclaimed credential, and explicitly reconcile before creating again.
+
+Webhook PATCH is ordinary JSON, unlike form metadata merge-patch; media types are
+operation-selected. Pause prevents future enqueueing only. Existing delivery
+snapshots keep their destination, headers and signing secret after endpoint
+rotation/deletion. Receivers must maintain old/new key overlap for outstanding
+deliveries and retained dead-letter replay. No operation claims an HTTP 2xx proves
+that the receiver verified its signature. Signed receiver examples and live
+verification remain #123/#124 release work.

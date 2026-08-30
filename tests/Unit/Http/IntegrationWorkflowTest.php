@@ -1,0 +1,167 @@
+<?php
+
+declare(strict_types=1);
+
+namespace App\Tests\Unit\Http;
+
+use App\Controller\ManagementIntegrationsController;
+use App\Domain\GoFormX\IntegrationOperation;
+use App\Domain\GoFormX\ManagementScope;
+use App\Domain\Organization\AuthenticatedAccount;
+use App\Domain\Organization\OrganizationAccessDenied;
+use App\Domain\Organization\OrganizationContext;
+use App\Domain\Organization\OrganizationRequestContext;
+use App\Domain\Organization\OrganizationRequestContextResolverInterface;
+use App\Domain\Organization\OrganizationRole;
+use App\Infrastructure\GoFormX\ManagementApiClientInterface;
+use App\Provider\AppServiceProvider;
+use PHPUnit\Framework\Attributes\DataProvider;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\HttpFoundation\Request;
+use Symfony\Component\HttpFoundation\Session\Session;
+use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Routing\RequestContext;
+use Waaseyaa\Entity\EntityInterface;
+use Waaseyaa\Foundation\Http\ControllerDispatcher;
+use Waaseyaa\Foundation\ServiceProvider\KernelServicesInterface;
+use Waaseyaa\HttpClient\HttpResponse;
+use Waaseyaa\Routing\WaaseyaaRouter;
+
+final class IntegrationWorkflowTest extends TestCase
+{
+    private const SUBJECT = '11111111-1111-4111-8111-111111111111';
+    private const ORGANIZATION = '22222222-2222-4222-8222-222222222222';
+    private const FORM = '33333333-3333-4333-8333-333333333333';
+    private const DELIVERY = '44444444-4444-4444-8444-444444444444';
+
+    #[DataProvider('operationsAndRoles')]
+    public function testRealRouteCompositionAppliesRoleAndScopeAndProjectsOnlyIntendedData(IntegrationOperation $operation, OrganizationRole $role): void
+    {
+        $resolver = $this->createMock(OrganizationRequestContextResolverInterface::class);
+        $resolver->expects(self::once())->method('resolve')->willReturn($this->context($role));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $allowed = $role !== OrganizationRole::Member;
+        if ($allowed) {
+            $expectedScope = match ($operation) {
+                IntegrationOperation::Tokens => ManagementScope::TokensRead,
+                IntegrationOperation::CreateToken, IntegrationOperation::RevokeToken => ManagementScope::TokensWrite,
+                IntegrationOperation::Webhook => ManagementScope::WebhooksRead, default => ManagementScope::WebhooksWrite,
+            };
+            $scopes = $operation === IntegrationOperation::CreateToken ? [$expectedScope, ManagementScope::FormsRead] : [$expectedScope];
+            $client->expects(self::once())->method('request')->with($operation->method(),
+                $operation->path(self::FORM, $this->token()['id'], self::DELIVERY) . ($operation === IntegrationOperation::Tokens ? '?limit=100' : ''),
+                self::SUBJECT, self::ORGANIZATION, $scopes, $operation->hasBody() ? $this->body($operation) : null)
+                ->willReturn($this->upstream($operation));
+        } else { $client->expects(self::never())->method('request'); }
+        $controller = new ManagementIntegrationsController($resolver, $client);
+        $services = $this->createMock(KernelServicesInterface::class);
+        $services->expects(self::once())->method('get')->with(ManagementIntegrationsController::class)->willReturn($controller);
+        $provider = new AppServiceProvider(); $provider->setKernelServices($services);
+        $router = new WaaseyaaRouter(new RequestContext('', $operation->method())); $provider->routes($router);
+        $request = $this->request($operation);
+        $request->attributes->add($router->match($request->getPathInfo()));
+        $route = $router->getRouteCollection()->get('goformx.management.integrations.' . $operation->value);
+        self::assertTrue($route->getOption('_authenticated'));
+        self::assertSame($operation->method() !== 'GET', $route->getOption('_csrf') === true);
+        $response = (new ControllerDispatcher([]))->dispatch($request);
+        self::assertSame($allowed ? $this->upstream($operation)->statusCode : 403, $response->getStatusCode(), $response->getContent());
+        self::assertStringNotContainsString('server-secret-canary', $response->getContent());
+        self::assertFalse($response->headers->has('Authorization')); self::assertFalse($response->headers->has('Set-Cookie'));
+        self::assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+        self::assertSame('nosniff', $response->headers->get('X-Content-Type-Options'));
+        if ($allowed && $operation === IntegrationOperation::CreateToken) { self::assertStringContainsString($this->secret(), $response->getContent()); }
+        else { self::assertStringNotContainsString($this->secret(), $response->getContent()); }
+    }
+
+    public static function operationsAndRoles(): iterable
+    {
+        foreach (IntegrationOperation::cases() as $operation) { foreach (OrganizationRole::cases() as $role) { yield $operation->value . '/' . $role->value => [$operation, $role]; } }
+    }
+
+    #[DataProvider('mutations')]
+    public function testCsrfDeniesEveryMutationBeforeMembershipOrIssuance(IntegrationOperation $operation): void
+    {
+        $request = $this->request($operation); $request->headers->remove('X-XSRF-TOKEN');
+        $resolver = $this->createMock(OrganizationRequestContextResolverInterface::class); $resolver->expects(self::never())->method('resolve');
+        $client = $this->createMock(ManagementApiClientInterface::class); $client->expects(self::never())->method('request');
+        self::assertSame(403, (new ManagementIntegrationsController($resolver, $client))->handle($request, $operation)->getStatusCode());
+    }
+
+    public static function mutations(): iterable
+    {
+        foreach (IntegrationOperation::cases() as $operation) { if ($operation->method() !== 'GET') { yield $operation->value => [$operation]; } }
+    }
+
+    #[DataProvider('invalidScopes')]
+    public function testInvalidDelegationNeverReachesTheIssuer(string $body): void
+    {
+        $client = $this->createMock(ManagementApiClientInterface::class); $client->expects(self::never())->method('request');
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class); $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        self::assertSame(400, (new ManagementIntegrationsController($resolver, $client))->handle($this->request(IntegrationOperation::CreateToken, $body), IntegrationOperation::CreateToken)->getStatusCode());
+    }
+
+    public static function invalidScopes(): iterable
+    {
+        foreach (['{}', '{"scopes":[]}', '{"scopes":["admin:all"]}', '{"scopes":["forms:read","forms:read"]}', '{"scopes":{"0":"forms:read"}}', '{"scopes":[null]}'] as $body) { yield [$body]; }
+    }
+
+    public function testMembershipIsResolvedAgainForEveryRequest(): void
+    {
+        $resolver = $this->createMock(OrganizationRequestContextResolverInterface::class);
+        $resolver->expects(self::exactly(3))->method('resolve')->willReturnOnConsecutiveCalls(
+            $this->context(OrganizationRole::Owner), $this->context(OrganizationRole::Member), $this->context(OrganizationRole::Admin));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $client->expects(self::exactly(2))->method('request')->willReturn($this->upstream(IntegrationOperation::Tokens));
+        $controller = new ManagementIntegrationsController($resolver, $client);
+        foreach ([200, 403, 200] as $status) { self::assertSame($status, $controller->handle($this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens)->getStatusCode()); }
+    }
+
+    public function testErrorsAndMalformedSuccessCannotRevealSecretsOrMasqueradeAsInvalidInput(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class); $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        foreach ([new HttpResponse(500, 'server-secret-canary'), new HttpResponse(201, '{"data":', ['content-type' => 'application/json']),
+            new HttpResponse(201, json_encode(['data' => ['token' => $this->secret(), 'metadata' => [...$this->token(), 'organizationId' => self::FORM]]]), ['content-type' => 'application/json'])] as $upstream) {
+            $client = $this->createStub(ManagementApiClientInterface::class); $client->method('request')->willReturn($upstream);
+            $response = (new ManagementIntegrationsController($resolver, $client))->handle($this->request(IntegrationOperation::CreateToken), IntegrationOperation::CreateToken);
+            self::assertGreaterThanOrEqual(500, $response->getStatusCode()); self::assertStringContainsString('uncertain', $response->getContent()); self::assertStringNotContainsString($this->secret(), $response->getContent()); self::assertStringNotContainsString('server-secret-canary', $response->getContent());
+        }
+    }
+
+    private function context(OrganizationRole $role): OrganizationRequestContext
+    {
+        return new OrganizationRequestContext(new AuthenticatedAccount(7, self::SUBJECT, 'Person', $this->createStub(EntityInterface::class)), new OrganizationContext(self::ORGANIZATION, 'Workspace', $role));
+    }
+
+    private function body(IntegrationOperation $operation): string
+    {
+        return $operation === IntegrationOperation::CreateToken ? '{"name":"Test","scopes":["forms:read"]}' : '{}';
+    }
+
+    private function request(IntegrationOperation $operation, ?string $body = null): Request
+    {
+        $request = Request::create('/api/control-plane' . substr($operation->path(self::FORM, $this->token()['id'], self::DELIVERY), 3), $operation->method(), content: $body ?? $this->body($operation));
+        $request->attributes->add(['formId' => self::FORM, 'tokenId' => $this->token()['id'], 'deliveryId' => self::DELIVERY]);
+        $session = new Session(new MockArraySessionStorage()); $session->set('_csrf_token', 'csrf'); $request->setSession($session);
+        $request->headers->set('X-XSRF-TOKEN', 'csrf'); $request->headers->set('Content-Type', 'application/json');
+        $request->headers->set('Authorization', 'Bearer browser-forgery'); $request->headers->set('X-Organization-ID', self::FORM); $request->headers->set('X-Role', 'owner');
+        return $request;
+    }
+
+    private function secret(): string { return 'gfst_' . str_repeat('a', 43); }
+    private function token(): array
+    {
+        return ['id' => rtrim(strtr(base64_encode(substr(hash('sha256', $this->secret(), true), 0, 12)), '+/', '-_'), '='), 'name' => 'Test', 'organizationId' => self::ORGANIZATION,
+            'scopes' => ['forms:read'], 'status' => 'active', 'createdAt' => '2026-08-30T00:00:00Z', 'expiresAt' => '2026-09-30T00:00:00Z', 'token' => $this->secret(), 'hash' => 'server-secret-canary'];
+    }
+
+    private function upstream(IntegrationOperation $operation): HttpResponse
+    {
+        $data = match ($operation) {
+            IntegrationOperation::Tokens => [$this->token()], IntegrationOperation::CreateToken => ['token' => $this->secret(), 'metadata' => $this->token()],
+            IntegrationOperation::ReplayDelivery => ['id' => self::DELIVERY, 'status' => 'pending'],
+            default => ['id' => self::DELIVERY, 'formId' => self::FORM, 'origin' => 'https://example.com', 'enabled' => true, 'createdAt' => '2026-08-30T00:00:00Z', 'updatedAt' => '2026-08-30T00:00:00Z', 'signingSecret' => 'server-secret-canary'],
+        };
+        $status = match ($operation) { IntegrationOperation::CreateToken => 201, IntegrationOperation::ReplayDelivery => 202, IntegrationOperation::RevokeToken, IntegrationOperation::DeleteWebhook => 204, default => 200 };
+        return new HttpResponse($status, json_encode(['data' => $data, 'debug' => 'server-secret-canary']), ['content-type' => 'application/json', 'authorization' => 'server-secret-canary', 'set-cookie' => 'server-secret-canary']);
+    }
+}

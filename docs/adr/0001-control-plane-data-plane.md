@@ -12,4 +12,10 @@ The OpenAPI document in `goformx/goformx` owns the cross-service contract. Chang
 
 ## Consequences
 
+Issue #123 permits one narrowly scoped provisioning response: after an owner/admin
+explicitly creates an external integration token, that newly created token may be
+shown once in the authenticated UI. It is not the control plane's transport
+credential. Assertions, signing custody and stored external tokens remain
+unreadable to the browser. ADR 0002 defines this exception and its tests.
+
 The two services can evolve and deploy independently. Tenant authorization must be enforced again by the Go service; a compromised or defective UI cannot select another organization. Cross-service integration tests and correlation identifiers are release requirements.

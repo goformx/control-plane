@@ -68,11 +68,17 @@ final class ManagementApiClientTest extends TestCase
         $body = '{"title":"Updated","schema":{"properties":{}}}';
         $client->request('PATCH', '/v1/forms/33333333-3333-4333-8333-333333333333',
             '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-            [ManagementScope::FormsWrite], $body, ifMatch: '"form-current"');
+            [ManagementScope::FormsWrite], $body, ifMatch: '"form-current"', mediaType: \App\Domain\GoFormX\RequestMediaType::MergePatch);
         self::assertSame('application/merge-patch+json', $transport->headers['Content-Type']);
         self::assertSame('"form-current"', $transport->headers['If-Match']);
         self::assertSame($body, $transport->body);
         self::assertStringStartsWith('Bearer ', $transport->headers['Authorization']);
+        $transport->url = '';
+        $client->request('PATCH', '/v1/forms/33333333-3333-4333-8333-333333333333/webhook',
+            '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
+            [ManagementScope::WebhooksWrite], '{"enabled":false}');
+        self::assertSame('application/json', $transport->headers['Content-Type']);
+        self::assertArrayNotHasKey('If-Match', $transport->headers);
         $transport->url = '';
         try {
             $client->request('PATCH', '/v1/forms/example', 'ignored', 'ignored', [ManagementScope::FormsWrite], ifMatch: '*');

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\GoFormX;
 
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\RequestMediaType;
 use App\Domain\GoFormX\EntityTag;
 use Waaseyaa\HttpClient\HttpClientInterface;
 use Waaseyaa\HttpClient\HttpResponse;
@@ -43,6 +44,7 @@ final readonly class ManagementApiClient implements ManagementApiClientInterface
         array|string|null $body = null,
         ?string $requestId = null,
         ?string $ifMatch = null,
+        RequestMediaType $mediaType = RequestMediaType::Json,
     ): HttpResponse {
         if (preg_match('#\A/v1(?:/|\z)#', $path) !== 1 || str_contains($path, '..') ||
             preg_match('/[\x00-\x1f\x7f#]/', $path) === 1) {
@@ -59,7 +61,7 @@ final readonly class ManagementApiClient implements ManagementApiClientInterface
             'X-Trace-Id' => $issued->requestId,
         ];
         if ($body !== null) {
-            $headers['Content-Type'] = strtoupper($method) === 'PATCH' ? 'application/merge-patch+json' : 'application/json';
+            $headers['Content-Type'] = $mediaType->value;
         }
         if ($ifMatch !== null) {
             $headers['If-Match'] = $ifMatch;

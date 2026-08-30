@@ -12,10 +12,31 @@
 <a class="skip" href="#main">Skip to forms</a>
 <header class="topbar"><a class="brand" href="/app">GoFormX<span>SCHEMA → SUBMISSION</span></a><button id="logout" type="button">Sign out</button></header>
 <main id="main">
-  <div class="workspace"><div><p class="eyebrow">YOUR WORKSPACE</p><h1 id="organization">Loading workspace…</h1><p id="role" class="muted"></p></div><button id="new-form" class="primary" type="button" disabled>+ New form</button></div>
+  <div class="workspace"><div><p class="eyebrow">YOUR WORKSPACE</p><h1 id="organization">Loading workspace…</h1><p id="role" class="muted"></p></div><div class="actions"><button id="manage-tokens" type="button" disabled>Manage API access</button><button id="new-form" class="primary" type="button" disabled>+ New form</button></div></div>
   <p id="notice" role="status" aria-live="polite"></p>
   <div id="error" role="alert" tabindex="-1" hidden><p id="error-message"></p><ul id="error-fields"></ul><a id="sign-in" href="/login" hidden>Sign in again</a><a id="verify-email" href="/verify-email" hidden>Check email verification</a></div>
   <noscript>This workspace requires JavaScript. The documented GoFormX API is also available to server-side clients.</noscript>
+  <p id="integration-message" role="status" aria-live="polite"></p><p id="integration-error" role="alert" tabindex="-1" hidden></p>
+  <div id="integration-uncertain" class="panel" hidden><p>A change may have succeeded. Reload token/webhook metadata, revoke any unclaimed credential, and reconcile before another mutation. Revocation remains available.</p><button id="acknowledge-integration" type="button">I have reconciled the change</button></div>
+  <section id="tokens-panel" class="panel" hidden aria-labelledby="tokens-heading">
+    <div class="section-heading"><h2 id="tokens-heading">External API access</h2><button id="reload-tokens" type="button">Reload token metadata</button></div>
+    <p>For your server, agent or custom dashboard. Never embed these credentials in public website code. Owners and admins manage this workspace’s machine access.</p>
+    <form id="token-create" autocomplete="off"><fieldset id="token-fields"><div class="two-columns"><label>Integration name<input id="token-name" required maxlength="100" autocomplete="off"></label><label>Token lifetime (days)<input id="token-days" type="number" min="1" max="365" value="30" required></label></div>
+      <fieldset id="token-scopes"><legend>Choose only the scopes needed</legend><div class="scope-grid">
+        <label class="check"><input type="checkbox" value="forms:read"> forms:read</label><label class="check"><input type="checkbox" value="forms:write"> forms:write</label>
+        <label class="check"><input type="checkbox" value="forms:publish"> forms:publish</label><label class="check"><input type="checkbox" value="submissions:read"> submissions:read</label>
+        <label class="check"><input type="checkbox" value="tokens:read"> tokens:read</label><label class="check"><input type="checkbox" value="tokens:write"> tokens:write</label>
+        <label class="check"><input type="checkbox" value="webhooks:read"> webhooks:read</label><label class="check"><input type="checkbox" value="webhooks:write"> webhooks:write</label>
+      </div></fieldset><p class="help">submissions:read exposes received data. tokens:write allows token issuance and revocation within the caller’s authority. No scope is selected by default.</p>
+      <label class="check"><input id="token-warning" type="checkbox" required> I understand the token is shown once. I will save it in secret custody, not a public website. Clipboard managers and downloads can retain copies.</label>
+      <button class="primary" type="submit">Create scoped token</button>
+    </fieldset></form>
+    <section id="token-reveal" class="secret-reveal" hidden aria-labelledby="token-reveal-heading"><h3 id="token-reveal-heading">Save this token now</h3><p>Only shown for this creation. Cleared after two minutes, when dismissed, when the tab is hidden, or when the form changes. It cannot be recovered later.</p>
+      <label>New external service token<input id="issued-token" readonly autocomplete="off" spellcheck="false"></label>
+      <div class="actions"><button id="copy-token" type="button">Copy token</button><button id="download-token" type="button">Download secret file</button><button id="dismiss-token" type="button">Dismiss token</button></div>
+    </section>
+    <p class="help">At most 100 recent tokens are shown, not a complete historical inventory. “Not recorded” does not prove a token has never been used. Reload metadata after saving a new token.</p><div id="token-list"></div>
+  </section>
   <div class="layout">
     <aside aria-labelledby="forms-heading"><div class="section-heading"><h2 id="forms-heading">Forms</h2><button id="refresh" type="button">Refresh</button></div>
       <p id="list-state" role="status">Loading forms…</p><nav id="forms-list" aria-label="Workspace forms"></nav>
@@ -70,6 +91,22 @@
           <p class="help">Acceptance is not webhook delivery. This is a bounded recent form-level window, not complete historical delivery evidence. Replay is a separate privileged action and is not offered here.</p>
         </section>
         <p class="help">Content is cleared when this tab is hidden or the form changes. No submission content is stored locally or sent to AI.</p>
+      </section>
+      <section id="webhook-panel" class="panel" hidden aria-labelledby="webhook-heading"><div class="section-heading"><h3 id="webhook-heading">Webhook delivery</h3><button id="load-webhook" type="button">Load webhook</button></div>
+        <p id="webhook-access" class="help" hidden>Only workspace owners and admins manage webhooks.</p><p id="webhook-state" role="status">Load this form’s webhook to see its current state.</p>
+        <p class="help">Pause stops future enqueueing only. Accepted deliveries keep their original destination, headers and signing secret after pause, rotation or deletion. Resuming does not backfill submissions.</p>
+        <form id="webhook-settings" autocomplete="off"><fieldset id="webhook-fields"><label>Public HTTPS destination<input id="webhook-url" type="url" required maxlength="2048" autocomplete="off" placeholder="https://example.com/hooks/goformx"></label>
+          <label>Custom headers (JSON object, write-only)<textarea id="webhook-headers" rows="2" autocomplete="off" spellcheck="false" placeholder="{}"></textarea></label>
+          <label>New receiver signing secret<input id="webhook-secret" type="password" minlength="32" maxlength="256" required autocomplete="new-password"></label>
+          <div class="actions"><button id="generate-webhook-secret" type="button">Generate signing secret</button><button id="copy-webhook-secret" type="button">Copy signing secret</button></div>
+          <label class="check"><input id="receiver-ready" type="checkbox" required> The receiver is ready for this secret. I will keep its old key for outstanding deliveries and dead-letter replay.</label>
+          <label class="check"><input id="webhook-enabled" type="checkbox" checked> Enable future deliveries when saving configuration</label>
+          <button type="submit">Save complete webhook configuration</button>
+        </fieldset></form>
+        <p class="help">Full replacement requires all destination/header/secret settings again. Pause/resume and signing-secret rotation preserve omitted fields. Paths, headers and stored signing secrets cannot be read back.</p>
+        <div class="actions"><button id="pause-webhook" type="button" disabled>Pause future deliveries</button><button id="rotate-webhook" type="button" disabled>Rotate signing secret only</button><button id="delete-webhook" type="button" disabled>Remove webhook endpoint</button></div>
+        <h4>Recent deliveries</h4><button id="load-deliveries" type="button">Load delivery history</button><div id="webhook-deliveries"></div>
+        <p class="help">A bounded recent window, not complete historical evidence. Replay is only available for dead letters and retains the original delivery ID and payload. The receiver must deduplicate IDs. A 2xx response is acknowledgement, not proof of signature verification.</p>
       </section>
       <p class="help">Archive and delete are not exposed by the current API. This UI will not pretend to remove your form.</p>
       <p class="help"><a href="/assets/forms.LICENSE.txt">Editor third-party notices</a></p>
