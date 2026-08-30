@@ -28,6 +28,8 @@ details, create immutable drafts, and explicitly publish. Members can read.
 CodeMirror provides JSON highlighting, completion and undo; field assistance is
 optional. Preview does not validate schemas or fetch references. Go remains the
 validation authority. Form details and schema drafts save independently.
+See the [forms workflow](docs/forms-workflow.md) for creation, publication,
+AI/API integration, and recovery from conflicts or uncertain responses.
 
 The editor requires a current browser supporting native JSON source access and
 `JSON.rawJSON`; startup checks this before loading the workspace. Numeric
