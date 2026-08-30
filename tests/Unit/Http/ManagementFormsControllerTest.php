@@ -12,6 +12,7 @@ use App\Domain\Organization\OrganizationRequestContext;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
 use App\Domain\Organization\OrganizationRole;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Waaseyaa\Entity\EntityInterface;
@@ -19,7 +20,8 @@ use Waaseyaa\HttpClient\HttpResponse;
 
 final class ManagementFormsControllerTest extends TestCase
 {
-    public function testTheBrowserReceivesDataButNeverTheServerAssertion(): void
+    #[DataProvider('validPagination')]
+    public function testTheBrowserReceivesDataButNeverTheServerAssertion(string $query, string $expectedPath): void
     {
         $account = new AuthenticatedAccount(
             7,
@@ -37,10 +39,10 @@ final class ManagementFormsControllerTest extends TestCase
         );
         $client = new FormsClientStub();
         $controller = new ManagementFormsController(new ContextResolverStub($requestContext), $client);
-        $response = $controller->list(Request::create('/api/control-plane/forms?limit=10&offset=5'));
+        $response = $controller->list(Request::create('/api/control-plane/forms' . $query));
 
         self::assertSame(200, $response->getStatusCode());
-        self::assertSame('/v1/forms?limit=10&offset=5', $client->path);
+        self::assertSame($expectedPath, $client->path);
         self::assertSame($account->subjectId, $client->subjectId);
         self::assertSame($requestContext->organization->organizationId, $client->organizationId);
         self::assertSame([ManagementScope::FormsRead], $client->scopes);
@@ -51,16 +53,39 @@ final class ManagementFormsControllerTest extends TestCase
         self::assertFalse($response->headers->has('Authorization'));
     }
 
-    public function testInvalidPaginationNeverReachesTheCredentialClient(): void
+    public static function validPagination(): iterable
+    {
+        yield 'defaults' => ['', '/v1/forms?limit=25&offset=0'];
+        yield 'custom page' => ['?limit=10&offset=5', '/v1/forms?limit=10&offset=5'];
+        yield 'minimum bounds' => ['?limit=1&offset=0', '/v1/forms?limit=1&offset=0'];
+        yield 'maximum bounds' => ['?limit=100&offset=10000', '/v1/forms?limit=100&offset=10000'];
+    }
+
+    #[DataProvider('invalidPagination')]
+    public function testInvalidPaginationNeverReachesTheCredentialClient(string $query): void
     {
         $client = new FormsClientStub();
-        $context = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $context = $this->createMock(OrganizationRequestContextResolverInterface::class);
+        $context->expects(self::never())->method('resolve');
         $response = (new ManagementFormsController($context, $client))->list(
-            Request::create('/api/control-plane/forms?limit=1000'),
+            Request::create('/api/control-plane/forms?' . $query),
         );
 
         self::assertSame(400, $response->getStatusCode());
         self::assertSame('', $client->path);
+    }
+
+    public static function invalidPagination(): iterable
+    {
+        yield 'limit above maximum' => ['limit=101'];
+        yield 'limit below minimum' => ['limit=0'];
+        yield 'offset above maximum' => ['offset=10001'];
+        yield 'former offset maximum' => ['offset=100000'];
+        yield 'negative offset' => ['offset=-1'];
+        yield 'non-integer offset' => ['offset=1.5'];
+        yield 'offset array' => ['offset[]=1'];
+        yield 'limit array' => ['limit[]=1'];
+        yield 'integer overflow' => ['offset=9999999999999999999999999'];
     }
 }
 
