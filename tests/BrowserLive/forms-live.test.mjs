@@ -10,8 +10,8 @@ test('real browser login → create → version → publish → public submissio
   assert.equal(url, 'http://127.0.0.1:18091');
   assert.equal(process.env.GOFORMX_PUBLIC_API_URL, 'http://127.0.0.1:18090');
   const fixture = input => {
-    try { return execFileSync('php', ['tests/BrowserLive/fixtures/users.php'], { input: JSON.stringify(input), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] }); }
-    catch { throw new Error('Disposable browser fixture failed; credentials and logs withheld.'); }
+    try { return execFileSync('php', ['tests/BrowserLive/fixtures/users.php'], { input: JSON.stringify(input), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 30000 }); }
+    catch { throw new Error(`Disposable browser fixture ${input.action} failed or timed out; credentials and logs withheld.`); }
   };
   const users = JSON.parse(fixture({ action: 'create' }));
   t.after(() => fixture({ action: 'cleanup', users: users.map(({ id, subject }) => ({ id, subject })) }));
