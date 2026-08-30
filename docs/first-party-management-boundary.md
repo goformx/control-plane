@@ -24,6 +24,24 @@ The configured signer is always published as `active`; additional keys cannot du
 
 Follow the [canonical data-plane rotation runbook](https://github.com/goformx/goformx/blob/main/docs/runbooks/first-party-key-rotation.md). Its automated HTTPS/HTTP/PostgreSQL drill proves verifier transitions, stale-response handling, and persistent replay checks, but does not prove that production custody was rotated or every deployed node refreshed. Record the real 65-second drain and deployment/recovery observations under goformx/goformx#120 and #125.
 
+### Disposable custody and process rehearsal
+
+The `Cross-service boundary` workflow also runs `tests/CrossService/CustodyRotationTest.php` against the pinned Go binary and disposable PostgreSQL/SQLite databases. It generates private seeds through `bin/maintenance/goformx-generate-signing-key`, passes them only to PHP child processes, and resolves the real configured `FirstPartyAssertionIssuer` through the application container. A CLI-only test fixture captures assertions over a private pipe; no signing endpoint is added to the application.
+
+The rehearsal checks the actual PHP public JWKS endpoint while replacing signer configuration, restarts the actual Go executable from those public snapshots, and measures a full 65-second retiring-key overlap. It proves that an unused old assertion expires before retirement, that a fresh assertion from the revoked key fails, that disabling first-party acceptance leaves a scoped service token working, and that replacement custody plus revoked-key snapshots preserve revocation and replay consumption across Go process restarts during a discovery outage. Replacement-key probes also require wrong-scope rejection and cross-organization denial for an actual form. Child logs are checked for seeds, assertions, and the service token, then removed; phase timestamps and elapsed time are safe CI output.
+
+Run only against disposable local services. The workflow is the reproducible setup: migrated PostgreSQL `goformx` on loopback port 5432 with its fixture credentials, a separately initialized `WAASEYAA_DB`, PHP 8.5 with Sodium, and the Go executable built from the workflow's pinned revision. Ports 18092 and 18093 must be unused. After that setup:
+
+```sh
+APP_ENV=local GOFORMX_CUSTODY_REHEARSAL=1 \
+GOFORMX_ROTATION_API_BINARY=/absolute/path/to/goformx-api \
+GOFORMX_ROTATION_DATA_PLANE_ROOT=/absolute/path/to/goformx/goforms \
+WAASEYAA_DB=/absolute/path/to/disposable-control-plane.sqlite \
+php vendor/bin/phpunit tests/CrossService/CustodyRotationTest.php --no-coverage
+```
+
+This is a **snapshot-based, single-node local rehearsal**, not a production rollout. The PHP publication probe uses loopback HTTP; successful HTTPS discovery, stale responses, and overlapping refreshes are covered separately by the Go tests. Production still requires protected secret provisioning, TLS discovery, per-node refresh/restart evidence, incident audit observations, and validated rollback snapshots under #120/#125. Never copy the fixture seeds, shared test passwords, or test application secrets into a deployment.
+
 The public key set is available at `/.well-known/goformx-control-plane-jwks.json`. Missing or malformed signing custody makes that endpoint return `503` and prevents management requests from being signed.
 
 ## Cross-service release gate

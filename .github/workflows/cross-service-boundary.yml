@@ -138,6 +138,14 @@ jobs:
       - name: Exercise the authenticated browser-to-data-plane boundary
         run: php vendor/bin/phpunit tests/CrossService/AuthenticatedManagementBoundaryTest.php --no-coverage
 
+      - name: Rehearse configured custody rotation and real process recovery
+        env:
+          GOFORMX_CUSTODY_REHEARSAL: '1'
+        run: |
+          GOFORMX_ROTATION_API_BINARY="$RUNNER_TEMP/goformx-api" \
+          GOFORMX_ROTATION_DATA_PLANE_ROOT="$GITHUB_WORKSPACE/.ci/goformx/goforms" \
+            php vendor/bin/phpunit tests/CrossService/CustodyRotationTest.php --no-coverage
+
       - name: Stop ephemeral HTTP servers
         if: always()
         run: |
