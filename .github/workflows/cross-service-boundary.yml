@@ -31,17 +31,20 @@ jobs:
       APP_URL: https://goformx.com
       WAASEYAA_APP_SECRET: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       WAASEYAA_JWT_SECRET: cross-service-only-not-production
-      WAASEYAA_DB: ${{ runner.temp }}/control-plane.sqlite
       WAASEYAA_DEV_FALLBACK_ACCOUNT: 'false'
       GOFORMX_API_URL: http://127.0.0.1:18090
       GOFORMX_ASSERTION_ISSUER: https://goformx.com
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
-      GOFORMX_CROSS_SERVICE_LOG: ${{ runner.temp }}/goformx-api.log
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
-      GOFORMX_CROSS_SERVICE_UI_LOG: ${{ runner.temp }}/control-plane.log
     steps:
       - name: Checkout control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Select disposable runtime paths
+        run: |
+          echo "WAASEYAA_DB=$RUNNER_TEMP/control-plane.sqlite" >> "$GITHUB_ENV"
+          echo "GOFORMX_CROSS_SERVICE_LOG=$RUNNER_TEMP/goformx-api.log" >> "$GITHUB_ENV"
+          echo "GOFORMX_CROSS_SERVICE_UI_LOG=$RUNNER_TEMP/control-plane.log" >> "$GITHUB_ENV"
 
       - name: Checkout the accepted Go data-plane boundary
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
