@@ -15,6 +15,42 @@ use Waaseyaa\User\DevAdminAccount;
 
 final class OrganizationPersistenceTest extends TestCase
 {
+    public function testMembershipRoleAndRevocationChangesSurviveRepositoryReload(): void
+    {
+        $kernel = new HttpKernel(dirname(__DIR__, 2));
+        $kernel->bootForCli();
+        $repository = $kernel->getEntityTypeManager()->getRepository('goformx_organization_membership');
+        $kernel->accountContext()->set(new DevAdminAccount());
+        $joinedAt = time();
+        // Repository creation uses field definitions, not constructor defaults.
+        // Supply the timestamp just as production personal provisioning does.
+        $membership = $repository->create([
+            'organization_uuid' => Uuid::v4()->toRfc4122(),
+            'user_id' => random_int(1_000_000, 2_000_000_000),
+            'role' => 'member',
+            'joined_at' => $joinedAt,
+        ]);
+
+        try {
+            $repository->save($membership);
+            foreach ([['member', 'active'], ['admin', 'active'], ['member', 'active'], ['member', 'revoked']] as [$role, $status]) {
+                $membership->set('role', $role);
+                $membership->set('status', $status);
+                $repository->save($membership);
+                $reloaded = $repository->find((string) $membership->id());
+                self::assertInstanceOf(EntityInterface::class, $reloaded);
+                self::assertSame($role, $reloaded->get('role'));
+                self::assertSame($status, $reloaded->get('status'));
+                self::assertSame($joinedAt, $reloaded->get('joined_at'));
+            }
+        } finally {
+            if ($membership->id() !== null) {
+                $repository->delete($membership);
+            }
+            $kernel->accountContext()->set(null);
+        }
+    }
+
     public function testAuthLifecycleEventsReachTheAppendOnlyAuditLedger(): void
     {
         $kernel = new HttpKernel(dirname(__DIR__, 2));

@@ -98,6 +98,7 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
             $this->exerciseFormWorkflow($uiUrl, $cookies, $foreignCookies, $organizationId, $foreignOrganizationId);
             $membership = $manager->getRepository('goformx_organization_membership')->create([
                 'organization_uuid' => $organizationId, 'user_id' => (int) $reader->id(), 'role' => 'member',
+                'joined_at' => time(),
             ]);
             $manager->getRepository('goformx_organization_membership')->save($membership);
             $readerCookies = $this->login($uiUrl, $readerEmail, $password);
