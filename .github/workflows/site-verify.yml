@@ -15,6 +15,7 @@ jobs:
       # CI database; production mode requires an already activated config generation.
       APP_ENV: local
       APP_URL: https://goformx.test
+      GOFORMX_PUBLIC_API_URL: https://api.goformx.test
       WAASEYAA_APP_SECRET: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       WAASEYAA_JWT_SECRET: ci-only-not-a-production-secret
     steps:
@@ -25,6 +26,13 @@ jobs:
           extensions: fileinfo, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
           coverage: none
       - run: composer install --no-interaction --prefer-dist
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm audit
+      - run: npx --no-install playwright install --with-deps chromium
       - run: composer validate --strict
       - run: composer audit --no-interaction
       - run: php vendor/bin/waaseyaa install:init

@@ -77,6 +77,8 @@ return [
     // bytes encoded as base64 and must remain in deployment secret custody.
     'goformx' => [
         'api_url' => getenv('GOFORMX_API_URL') ?: '',
+        // Browser-safe origin for integration examples, never the private transport URL.
+        'public_api_url' => getenv('GOFORMX_PUBLIC_API_URL') ?: '',
         'first_party' => [
             'issuer' => getenv('GOFORMX_ASSERTION_ISSUER') ?: (getenv('APP_URL') ?: ''),
             'audience' => getenv('GOFORMX_ASSERTION_AUDIENCE') ?: (getenv('GOFORMX_API_URL') ?: ''),

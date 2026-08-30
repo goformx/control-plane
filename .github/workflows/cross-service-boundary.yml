@@ -36,6 +36,7 @@ jobs:
       GOFORMX_ASSERTION_ISSUER: https://goformx.com
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
+      GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
     steps:
       - name: Checkout control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -71,6 +72,14 @@ jobs:
         run: |
           composer install --no-interaction --prefer-dist
           php vendor/bin/waaseyaa install:init
+
+      - name: Set up the pinned browser test runtime
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx --no-install playwright install --with-deps chromium
 
       - name: Generate ephemeral assertion custody
         run: |
@@ -137,6 +146,11 @@ jobs:
 
       - name: Exercise the authenticated browser-to-data-plane boundary
         run: php vendor/bin/phpunit tests/CrossService/AuthenticatedManagementBoundaryTest.php --no-coverage
+
+      - name: Exercise the rendered human workflow against both real services
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+        run: npm run test:live
 
       - name: Rehearse configured custody rotation and real process recovery
         env:
