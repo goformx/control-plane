@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { chromium } from 'playwright';
+import { parseJSON, stringify } from '../../ui/schema-json.js';
+import { readSchemaEditor } from '../helpers/editor.mjs';
 
 test('real browser login → create → version → publish → public submission, with foreign workspace denial', { timeout: 90000 }, async t => {
   assert.equal(process.env.GOFORMX_BROWSER_REHEARSAL, '1');
@@ -59,31 +61,49 @@ test('real browser login → create → version → publish → public submissio
   await owner.getByRole('button', { name: 'Validate & create form' }).click();
   await owner.getByText('Form created as a draft.', { exact: false }).waitFor();
   const schema = owner.getByRole('textbox', { name: 'JSON Schema editor' });
-  const original = JSON.parse(await schema.innerText());
+  const original = JSON.parse(await readSchemaEditor(owner));
   const invalid = JSON.stringify({ ...original, type: 'array' });
   await schema.fill(invalid);
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.locator('#error-fields li').first().waitFor();
-  assert.equal(await schema.innerText(), invalid, 'Go validation failure retains the editable schema');
-  await schema.fill(JSON.stringify({ ...original, properties: { ...original.properties, unconstrained: {}, ['__proto__']: { type: 'string' } } }));
+  assert.equal(await readSchemaEditor(owner), invalid, 'Go validation failure retains the editable schema');
+  const revised = { ...original, properties: { ...original.properties, unconstrained: {}, ['__proto__']: { type: 'string' } } };
+  revised.properties.exactInteger = parseJSON('{"type":"integer","minimum":9007199254740993}');
+  revised.properties.exactDecimal = parseJSON('{"type":"number","minimum":0.1234567890123456789}');
+  const exactSchema = stringify(revised);
+  assert.match(exactSchema, /"minimum":\s*9007199254740993/);
+  assert.match(exactSchema, /"minimum":\s*0\.1234567890123456789/);
+  await schema.fill(exactSchema);
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.getByText('Saved draft version 2.', { exact: false }).waitFor();
   await owner.getByLabel('Saved versions').selectOption('1');
   await owner.getByText('Viewing saved version 1', { exact: false }).waitFor();
-  assert.deepEqual(JSON.parse(await schema.innerText()), original);
+  assert.deepEqual(JSON.parse(await readSchemaEditor(owner)), original);
   await owner.getByLabel('Saved versions').selectOption('2');
   await owner.getByText('Viewing saved version 2', { exact: false }).waitFor();
-  assert.deepEqual(JSON.parse(await schema.innerText()).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
+  const readback = await readSchemaEditor(owner);
+  assert.deepEqual(JSON.parse(readback).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
+  assert.match(readback, /"minimum":\s*9007199254740993/, 'Saved integer constraint must not be rounded');
+  assert.match(readback, /"minimum":\s*0\.1234567890123456789/, 'Saved decimal constraint must not be rounded');
   await owner.getByRole('button', { name: 'Review publication' }).click();
   await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
   await owner.getByText('Version 2 published.', { exact: false }).waitFor();
   const endpoint = await owner.getByLabel('Submission endpoint').inputValue();
   assert.match(endpoint, /^http:\/\/127\.0\.0\.1:18090\/v1\/public\/forms\/gfpk_[A-Za-z0-9_-]+\/submissions$/);
   const submission = await owner.evaluate(async ({ endpoint, key }) => {
-    const options = { method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-GoFormX-Schema-Version': '2' }, body: JSON.stringify({ data: { email: 'browser@example.test', message: 'Synthetic browser gate' } }) };
+    // Raw JSON is intentional: JavaScript Number would invalidate this oracle.
+    const body = '{"data":{"email":"browser@example.test","message":"Synthetic browser gate","exactInteger":9007199254740993,"exactDecimal":0.1234567890123456789}}';
+    const options = { method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-GoFormX-Schema-Version': '2' }, body };
+    const rejected = [];
+    for (const below of [body.replace('9007199254740993', '9007199254740992'), body.replace('0.1234567890123456789', '0.1234567890123456788')]) {
+      const response = await fetch(endpoint, { ...options, headers: { ...options.headers, 'Idempotency-Key': crypto.randomUUID() }, body: below });
+      rejected.push(response.status);
+      await response.text();
+    }
     const first = await fetch(endpoint, options), second = await fetch(endpoint, options);
-    return { statuses: [first.status, second.status], first: await first.json(), second: await second.json() };
+    return { rejected, statuses: [first.status, second.status], first: await first.json(), second: await second.json() };
   }, { endpoint, key: randomUUID() });
+  assert.deepEqual(submission.rejected, [422, 422], 'Adjacent integer and decimal values must fail exact schema constraints');
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);

@@ -46,6 +46,10 @@ the Linux CI gate runs the full command.
 
 The separate cross-service workflow additionally runs `npm run test:live`
 against real Waaseyaa sessions, Go HTTP handlers and disposable PostgreSQL.
+It saves and reloads exact integer/decimal schema constraints through the editor,
+rejects adjacent below-minimum public values, and retries a valid precise
+submission. This guards the end-to-end numeric boundary from GoFormX #144;
+browser-only codec tests cannot detect a rounding data plane.
 The HTTP/custody and browser rehearsals use separate disposable environments,
 so their loopback traffic does not share the framework's persistent per-IP
 rate-limit budget. Both must pass the `authenticated-boundary` gate; production
