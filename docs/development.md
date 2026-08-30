@@ -15,7 +15,7 @@ composer check
 
 ## Configuration
 
-Runtime configuration is supplied through environment variables. `APP_URL` is the canonical public origin. `GOFORMX_API_BASE_URL` is the server-side data-plane origin. Production secrets are never committed and browser-delivered JavaScript must not contain assertion-signing or management credentials.
+Runtime configuration is supplied through environment variables. `APP_URL` is the canonical public origin. `GOFORMX_API_URL` is the server-side data-plane origin. Production secrets are never committed and browser-delivered JavaScript must not contain assertion-signing or management credentials.
 
 `WAASEYAA_AUTH_TOKEN_SECRET` optionally gives verification, reset, and invite tokens an independent HMAC key. When absent, Waaseyaa derives a purpose-scoped key from `WAASEYAA_APP_SECRET`; the application does not reuse `WAASEYAA_JWT_SECRET`.
 
