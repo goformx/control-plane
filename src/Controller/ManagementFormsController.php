@@ -23,8 +23,9 @@ final readonly class ManagementFormsController
     public function list(Request $request): Response
     {
         try {
-            $limit = $this->boundedInteger($request->query->get('limit'), 25, 1, 100, 'limit');
-            $offset = $this->boundedInteger($request->query->get('offset'), 0, 0, 100000, 'offset');
+            $pagination = $request->query->all();
+            $limit = $this->boundedInteger($pagination['limit'] ?? null, 25, 1, 100, 'limit');
+            $offset = $this->boundedInteger($pagination['offset'] ?? null, 0, 0, 10000, 'offset');
             $context = $this->organizations->resolve($request);
             $downstream = $this->client->request(
                 'GET',
