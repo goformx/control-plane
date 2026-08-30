@@ -18,7 +18,11 @@ Local API transport may use an explicit loopback HTTP origin. Non-loopback deplo
 
 ## Rotation
 
-Publish a future public key through `GOFORMX_ASSERTION_ADDITIONAL_JWKS` with state `next`. After every Go node has refreshed it, promote that key to the configured signer and publish the previous public key as `retiring`. Retain it for at least 65 seconds, then remove it. A compromised key is published as `revoked`; stop issuance until the replacement snapshot has reached every data-plane node.
+Publish a future public key through `GOFORMX_ASSERTION_ADDITIONAL_JWKS` with state `next`. After every Go node has refreshed it, promote that key to the configured signer and publish the previous public key as `retiring`. Retain it for at least 65 seconds, then publish it as `revoked` and prove rejection before optionally omitting it from live discovery. Keep revoked tombstones in the Go deployment and rollback snapshots; simple removal does not defend against a stale publisher or cold-start snapshot.
+
+The configured signer is always published as `active`; additional keys cannot duplicate its ID. During emergency recovery, disable first-party acceptance in Go first, replace compromised signing custody, then publish the old public key as `revoked` through `GOFORMX_ASSERTION_ADDITIONAL_JWKS`. Restore acceptance only after the replacement and revoked-key snapshots have reached every Go node. Never reuse a revoked key ID or restore an older snapshot that loses a revocation.
+
+Follow the [canonical data-plane rotation runbook](https://github.com/goformx/goformx/blob/main/docs/runbooks/first-party-key-rotation.md). Its automated HTTPS/HTTP/PostgreSQL drill proves verifier transitions, stale-response handling, and persistent replay checks, but does not prove that production custody was rotated or every deployed node refreshed. Record the real 65-second drain and deployment/recovery observations under goformx/goformx#120 and #125.
 
 The public key set is available at `/.well-known/goformx-control-plane-jwks.json`. Missing or malformed signing custody makes that endpoint return `503` and prevents management requests from being signed.
 
