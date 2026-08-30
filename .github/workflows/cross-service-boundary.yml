@@ -1,0 +1,146 @@
+name: Cross-service boundary
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  authenticated-boundary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
+        env:
+          POSTGRES_DB: goformx
+          POSTGRES_USER: goformx
+          POSTGRES_PASSWORD: cross-service-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U goformx -d goformx"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      APP_ENV: local
+      APP_DEBUG: 'false'
+      APP_URL: https://goformx.com
+      WAASEYAA_APP_SECRET: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+      WAASEYAA_JWT_SECRET: cross-service-only-not-production
+      WAASEYAA_DB: ${{ runner.temp }}/control-plane.sqlite
+      WAASEYAA_DEV_FALLBACK_ACCOUNT: 'false'
+      GOFORMX_API_URL: http://127.0.0.1:18090
+      GOFORMX_ASSERTION_ISSUER: https://goformx.com
+      GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
+      GOFORMX_CROSS_SERVICE_LOG: ${{ runner.temp }}/goformx-api.log
+      GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
+      GOFORMX_CROSS_SERVICE_UI_LOG: ${{ runner.temp }}/control-plane.log
+    steps:
+      - name: Checkout control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Checkout the accepted Go data-plane boundary
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: goformx/goformx
+          ref: 257404e17a4929f5784c4175595208c44bf6f5ae
+          path: .ci/goformx
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
+        with:
+          php-version: '8.5'
+          extensions: fileinfo, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
+          coverage: none
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
+        with:
+          go-version-file: .ci/goformx/goforms/go.mod
+          cache: true
+          cache-dependency-path: .ci/goformx/goforms/go.sum
+
+      - name: Bootstrap the Waaseyaa application
+        run: |
+          composer install --no-interaction --prefer-dist
+          php vendor/bin/waaseyaa install:init
+
+      - name: Generate ephemeral assertion custody
+        run: |
+          custody="$(php bin/maintenance/goformx-generate-signing-key ci-cross-service)"
+          while IFS='=' read -r name value; do
+            if [[ "$name" == "GOFORMX_ASSERTION_SIGNING_SEED" ]]; then
+              echo "::add-mask::$value"
+            fi
+            printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
+          done <<< "$custody"
+
+      - name: Migrate the disposable GoFormX database
+        working-directory: .ci/goformx/goforms
+        run: >-
+          go run -tags postgres github.com/golang-migrate/migrate/v4/cmd/migrate@v4.19.1
+          -path migrations/postgresql
+          -database "postgres://goformx:cross-service-only@127.0.0.1:5432/goformx?sslmode=disable"
+          up
+
+      - name: Start the real GoFormX API
+        working-directory: .ci/goformx/goforms
+        env:
+          APP_ENVIRONMENT: test
+          APP_DEBUG: 'false'
+          APP_LOG_LEVEL: info
+          APP_HOST: 127.0.0.1
+          APP_PORT: '18090'
+          DB_DRIVER: postgres
+          DB_HOST: 127.0.0.1
+          DB_PORT: '5432'
+          DB_NAME: goformx
+          DB_USERNAME: goformx
+          DB_PASSWORD: cross-service-only
+          DB_SSL_MODE: disable
+          FIRST_PARTY_ASSERTION_ENABLED: 'true'
+          FIRST_PARTY_ASSERTION_ISSUER: https://goformx.com
+          FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
+        run: |
+          go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
+          FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
+            "$RUNNER_TEMP/goformx-api" > "$GOFORMX_CROSS_SERVICE_LOG" 2>&1 &
+          echo "GOFORMX_API_PID=$!" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18090/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "GoFormX API did not become ready. Raw credential-adjacent logs are not published."
+          exit 1
+
+      - name: Start the real Waaseyaa HTTP entry point
+        run: |
+          php -S 127.0.0.1:18091 -t public public/index.php > "$GOFORMX_CROSS_SERVICE_UI_LOG" 2>&1 &
+          echo "GOFORMX_UI_PID=$!" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:18091/login > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Waaseyaa did not become ready. Raw credential-adjacent logs are not published."
+          exit 1
+
+      - name: Exercise the authenticated browser-to-data-plane boundary
+        run: php vendor/bin/phpunit tests/CrossService/AuthenticatedManagementBoundaryTest.php --no-coverage
+
+      - name: Stop ephemeral HTTP servers
+        if: always()
+        run: |
+          if [[ -n "${GOFORMX_API_PID:-}" ]]; then
+            kill "$GOFORMX_API_PID" 2>/dev/null || true
+          fi
+          if [[ -n "${GOFORMX_UI_PID:-}" ]]; then
+            kill "$GOFORMX_UI_PID" 2>/dev/null || true
+          fi
