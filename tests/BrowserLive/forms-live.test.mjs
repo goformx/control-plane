@@ -29,7 +29,8 @@ test('real browser login → create → version → publish → public submissio
     page.on('response', response => { const path = new URL(response.url()).pathname; if (path === '/api/control-plane/context' || path === '/api/auth/login') statuses.push([path, response.status()]); });
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => { if (request.headers().authorization) leaked.push(request.url()); });
-    await page.goto(url + '/login');
+    const loginPage = await page.goto(url + '/login');
+    assert.equal(loginPage.status(), 200, `Login page HTTP ${loginPage.status()}; rate-limit remaining=${loginPage.headers()['x-ratelimit-remaining'] ?? 'absent'}, retry-after=${loginPage.headers()['retry-after'] ?? 'absent'}`);
     await page.getByLabel('Email', { exact: true }).fill(user.email);
     await page.getByLabel('Password', { exact: true }).fill(user.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
