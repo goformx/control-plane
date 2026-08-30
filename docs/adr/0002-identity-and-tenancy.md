@@ -40,3 +40,34 @@ For the initial forms workflow, an active `member` can list/read forms and their
 `FormOperation` binds each supported form operation to its canonical method, resource path, and single required scope. The production route provider and forms controller use that binding. Every request resolves membership again, checks the operation against the current organization role, and only then calls the server-side credential client. Browser-selected organization IDs, role headers, and credentials do not authorize the call. A demotion or membership revocation must take effect on the next request without requiring sign-out.
 
 All browser mutations require the existing session CSRF token, including explicit publication. Metadata updates carry a single strong `If-Match` ETag; missing preconditions return `428`, and stale preconditions retain Go's `412`. PHP preserves JSON request bytes (including empty schema objects) and passes Go's structured validation errors back without introducing a second schema validator. These endpoints are the browser workflow boundary, not a claim that the editor UI or production self-service gate is complete.
+
+## Submission-operation authorization
+
+Submission content is a separate permission from form-definition access. Active
+owners and admins may list, inspect, and export submissions; members may not.
+`SubmissionOperation` owns this application policy. Every browser request resolves
+the current membership before issuing only `submissions:read`; no browser token,
+organization header, or role header supplies authority. Revocation/demotion takes
+effect on the next request.
+
+The control-plane routes mirror Go's list/detail/export paths under
+`/api/control-plane/forms/{formId}/submissions`. Export is POST and requires
+session CSRF. Go owns strict cursor/filter/body validation, immutable accepted
+schema projection, redaction, resource bounds, and durable preparation audit.
+PHP preserves raw JSON numbers and repeated query/body fields for Go's validator,
+never accessing the data-plane database or implementing another redactor.
+
+Exports require a valid export UUID, JSON/CSV content type, and a declared
+`Content-Length` exactly matching the fully received bounded body. Missing or
+mismatched metadata fails without an attachment. This protects against the
+current framework stream client's capped or interrupted reads (upstream
+[Waaseyaa #2708](https://github.com/waaseyaa/framework/issues/2708)). The transport
+allows fifteen seconds, leaving headroom beyond Go's ten-second export processing
+deadline. Response filenames
+are reconstructed from the validated UUID and media type; arbitrary upstream
+headers, cookies, and credentials are not forwarded. Responses are no-store and
+nosniff. No payload is logged or persisted by this controller.
+
+This boundary targets Go development contract 1.2.0 and is not a production
+release claim. The submissions UI and real browser/cross-service release evidence
+remain part of GoFormX #122.

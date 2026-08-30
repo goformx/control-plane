@@ -8,8 +8,10 @@ use App\Controller\AuthPageController;
 use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
 use App\Controller\ManagementFormsController;
+use App\Controller\ManagementSubmissionsController;
 use App\Controller\OrganizationContextController;
 use App\Domain\GoFormX\FormOperation;
+use App\Domain\GoFormX\SubmissionOperation;
 use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationMembershipService;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
@@ -86,10 +88,15 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(ManagementApiClient::class, fn() => new ManagementApiClient(
             (string) ($this->config['goformx']['api_url'] ?? ''),
             $this->resolve(FirstPartyAssertionIssuer::class),
-            new StreamHttpClient(timeout: 10.0, maxResponseBytes: 8 * 1024 * 1024),
+            // Leave transport headroom beyond Go's ten-second export deadline.
+            new StreamHttpClient(timeout: 15.0, maxResponseBytes: 8 * 1024 * 1024),
         ));
         $this->singleton(ManagementApiClientInterface::class, fn() => $this->resolve(ManagementApiClient::class));
         $this->singleton(ManagementFormsController::class, fn() => new ManagementFormsController(
+            $this->resolve(OrganizationRequestContextResolverInterface::class),
+            $this->resolve(ManagementApiClientInterface::class),
+        ));
+        $this->singleton(ManagementSubmissionsController::class, fn() => new ManagementSubmissionsController(
             $this->resolve(OrganizationRequestContextResolverInterface::class),
             $this->resolve(ManagementApiClientInterface::class),
         ));
@@ -161,6 +168,16 @@ final class AppServiceProvider extends ServiceProvider
                 $builder->requireCsrf();
             }
             $router->addRoute('goformx.management.forms.' . $operation->value, $builder->build());
+        }
+        foreach (SubmissionOperation::cases() as $operation) {
+            $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))
+                ->controller(fn(Request $request, string ...$routeParameters) => $this->resolve(ManagementSubmissionsController::class)->handle($request, $operation))
+                ->requireAuthentication()
+                ->methods($operation->method());
+            if ($operation === SubmissionOperation::Export) {
+                $builder->requireCsrf();
+            }
+            $router->addRoute('goformx.management.submissions.' . $operation->value, $builder->build());
         }
         $router->addRoute(
             'goformx.context.switch',
