@@ -9,6 +9,7 @@ use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
 use App\Controller\ManagementFormsController;
 use App\Controller\OrganizationContextController;
+use App\Domain\GoFormX\FormOperation;
 use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationMembershipService;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
@@ -147,14 +148,17 @@ final class AppServiceProvider extends ServiceProvider
                 ->methods('GET')
                 ->build(),
         );
-        $router->addRoute(
-            'goformx.management.forms.list',
-            RouteBuilder::create('/api/control-plane/forms')
-                ->controller(fn(Request $request) => $this->resolve(ManagementFormsController::class)->list($request))
+        foreach (FormOperation::cases() as $operation) {
+            $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))
+                // The dispatcher also forwards named path parameters; the controller validates their request attributes.
+                ->controller(fn(Request $request, string ...$routeParameters) => $this->resolve(ManagementFormsController::class)->handle($request, $operation))
                 ->requireAuthentication()
-                ->methods('GET')
-                ->build(),
-        );
+                ->methods($operation->method());
+            if ($operation->method() !== 'GET') {
+                $builder->requireCsrf();
+            }
+            $router->addRoute('goformx.management.forms.' . $operation->value, $builder->build());
+        }
         $router->addRoute(
             'goformx.context.switch',
             RouteBuilder::create('/api/control-plane/context/switch')

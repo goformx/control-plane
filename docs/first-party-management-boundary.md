@@ -16,6 +16,12 @@ The accepted values are fixed:
 
 Local API transport may use an explicit loopback HTTP origin. Non-loopback deployments require HTTPS.
 
+## Browser form operations
+
+The application exposes the eight canonical form operations under `/api/control-plane/forms`: list/create, get/metadata update, version list/create/get, and explicit version publication. `FormOperation` defines their method/path/scope mapping; the cross-service gate checks that inventory against the pinned Go OpenAPI. The [application role policy](adr/0002-identity-and-tenancy.md#form-operation-authorization) is checked against a freshly resolved membership before any credential is issued.
+
+The browser sends session cookies and an `X-XSRF-TOKEN` for writes, never a Go assertion. JSON writes use `application/json`; metadata PATCH uses `application/merge-patch+json` and requires the last observed strong `ETag` as `If-Match`. Response status, body, validated ETag, and correlation ID survive the boundary; authorization and other arbitrary upstream headers do not. Requests are bounded to the Go contract's 1 MiB limit, and schema JSON is forwarded verbatim to preserve objects and scalar representations. Signing/configuration failures return a generic `503`, not a misleading browser-input error with internal diagnostics.
+
 ## Rotation
 
 Publish a future public key through `GOFORMX_ASSERTION_ADDITIONAL_JWKS` with state `next`. After every Go node has refreshed it, promote that key to the configured signer and publish the previous public key as `retiring`. Retain it for at least 65 seconds, then publish it as `revoked` and prove rejection before optionally omitting it from live discovery. Keep revoked tombstones in the Go deployment and rollback snapshots; simple removal does not defend against a stale publisher or cold-start snapshot.

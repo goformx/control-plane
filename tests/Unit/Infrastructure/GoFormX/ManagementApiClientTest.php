@@ -57,11 +57,36 @@ final class ManagementApiClientTest extends TestCase
             [ManagementScope::FormsRead],
         );
     }
+
+    public function testItPreservesRawJsonAndConditionalHeadersWithoutGivingCallersArbitraryHeaders(): void
+    {
+        $transport = new RecordingHttpClient();
+        $client = new ManagementApiClient('https://api.goformx.com', new FirstPartyAssertionIssuer(
+            'https://goformx.com', 'https://api.goformx.com',
+            SigningKey::fromBase64Seed('test', base64_encode(str_repeat("\x55", 32))),
+        ), $transport);
+        $body = '{"title":"Updated","schema":{"properties":{}}}';
+        $client->request('PATCH', '/v1/forms/33333333-3333-4333-8333-333333333333',
+            '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
+            [ManagementScope::FormsWrite], $body, ifMatch: '"form-current"');
+        self::assertSame('application/merge-patch+json', $transport->headers['Content-Type']);
+        self::assertSame('"form-current"', $transport->headers['If-Match']);
+        self::assertSame($body, $transport->body);
+        self::assertStringStartsWith('Bearer ', $transport->headers['Authorization']);
+        $transport->url = '';
+        try {
+            $client->request('PATCH', '/v1/forms/example', 'ignored', 'ignored', [ManagementScope::FormsWrite], ifMatch: '*');
+            self::fail('Wildcard If-Match must be rejected before transport or issuance.');
+        } catch (\InvalidArgumentException) {
+            self::assertSame('', $transport->url);
+        }
+    }
 }
 
 final class RecordingHttpClient implements HttpClientInterface
 {
     public string $url = '';
+    public array|string|null $body = null;
 
     /** @var array<string, string> */
     public array $headers = [];
@@ -70,6 +95,7 @@ final class RecordingHttpClient implements HttpClientInterface
     {
         $this->url = $url;
         $this->headers = $headers;
+        $this->body = $body;
 
         return new HttpResponse(200, '{"data":[]}');
     }

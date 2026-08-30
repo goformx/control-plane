@@ -21,5 +21,6 @@ interface ManagementApiClientInterface
         array $scopes,
         array|string|null $body = null,
         ?string $requestId = null,
+        ?string $ifMatch = null,
     ): HttpResponse;
 }
