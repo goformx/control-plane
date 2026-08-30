@@ -14,18 +14,32 @@ test('real browser login → create → version → publish → public submissio
     catch { throw new Error(`Disposable browser fixture ${input.action} failed or timed out; credentials and logs withheld.`); }
   };
   const users = JSON.parse(fixture({ action: 'create' }));
-  t.after(() => fixture({ action: 'cleanup', users: users.map(({ id, subject }) => ({ id, subject })) }));
-  const browser = await chromium.launch(); t.after(() => browser.close());
+  let browserServer;
+  t.after(async () => {
+    try { if (browserServer) await browserServer.kill(); }
+    finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }) => ({ id, subject })) }); }
+  });
+  // Explicit ownership permits deterministic teardown even after a failed browser request.
+  browserServer = await chromium.launchServer();
+  const browser = await chromium.connect(browserServer.wsEndpoint());
   const errors = [], leaked = [];
   async function login(user) {
     const context = await browser.newContext(); const page = await context.newPage(); page.setDefaultTimeout(15000);
+    const statuses = [];
+    page.on('response', response => { const path = new URL(response.url()).pathname; if (path === '/api/control-plane/context' || path === '/api/auth/login') statuses.push([path, response.status()]); });
     page.on('pageerror', error => errors.push(error.message));
     page.on('request', request => { if (request.headers().authorization) leaked.push(request.url()); });
     await page.goto(url + '/login');
     await page.getByLabel('Email', { exact: true }).fill(user.email);
     await page.getByLabel('Password', { exact: true }).fill(user.password);
     await page.getByRole('button', { name: 'Sign in', exact: true }).click();
-    await page.waitForURL(url + '/app'); await page.getByText('owner · Server-authorized workspace').waitFor();
+    await page.waitForURL(url + '/app');
+    try { await page.getByText('owner · Server-authorized workspace').waitFor(); }
+    catch {
+      // Only the application's already-sanitized UI error and non-secret status codes.
+      const detail = await page.locator('#error-message').textContent();
+      throw new Error(`Workspace initialization failed: ${detail}; HTTP statuses ${JSON.stringify(statuses)}; script errors ${JSON.stringify(errors)}`);
+    }
     return page;
   }
   const owner = await login(users[0]);
@@ -57,7 +71,7 @@ test('real browser login → create → version → publish → public submissio
   const endpoint = await owner.getByLabel('Submission endpoint').inputValue();
   assert.match(endpoint, /^http:\/\/127\.0\.0\.1:18090\/v1\/public\/forms\/gfpk_[A-Za-z0-9_-]+\/submissions$/);
   const submission = await owner.evaluate(async ({ endpoint, key }) => {
-    const options = { method: 'POST', headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-GoFormX-Schema-Version': '2' }, body: JSON.stringify({ data: { email: 'browser@example.test', message: 'Synthetic browser gate' } }) };
+    const options = { method: 'POST', signal: AbortSignal.timeout(15000), headers: { 'Content-Type': 'application/json', 'Idempotency-Key': key, 'X-GoFormX-Schema-Version': '2' }, body: JSON.stringify({ data: { email: 'browser@example.test', message: 'Synthetic browser gate' } }) };
     const first = await fetch(endpoint, options), second = await fetch(endpoint, options);
     return { statuses: [first.status, second.status], first: await first.json(), second: await second.json() };
   }, { endpoint, key: randomUUID() });
