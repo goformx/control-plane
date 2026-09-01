@@ -46,8 +46,13 @@ final readonly class ManagementIntegrationsController
             if (strlen($downstream->body) > 262144) { throw new \UnexpectedValueException(); }
             if ($downstream->statusCode >= 400) {
                 $payload = json_decode($downstream->body, true);
-                $auditUnavailable = $downstream->statusCode === 503 && ($payload['error']['code'] ?? '') === 'management_audit_unavailable';
-                return $this->error($downstream->statusCode, $auditUnavailable);
+                $downstreamCode = is_string($payload['error']['code'] ?? null) ? $payload['error']['code'] : null;
+                $assertionFailure = $downstream->statusCode === 401;
+                $noCommitCode = $assertionFailure ? 'data_plane_authentication_failed' :
+                    ($downstream->statusCode === 503 && in_array($downstreamCode,
+                        ['management_audit_unavailable', 'webhooks_disabled', 'service_unavailable'], true) ? $downstreamCode : null);
+                // A 401 here is from Go's first-party assertion boundary, not the browser's PHP session.
+                return $this->error($assertionFailure ? 502 : $downstream->statusCode, $noCommitCode);
             }
             $expectedStatus = match ($operation) {
                 IntegrationOperation::CreateToken => 201, IntegrationOperation::ReplayDelivery => 202,
@@ -66,16 +71,25 @@ final readonly class ManagementIntegrationsController
         } catch (\Throwable) { return $this->error(502); }
     }
 
-    private function error(int $status, bool $auditUnavailable = false): Response
+    private function error(int $status, ?string $noCommitCode = null): Response
     {
         $messages = [400 => 'Check the integration request and selected scopes.', 401 => 'Sign in again.',
             403 => 'Your current workspace membership does not allow integration management.', 404 => 'The integration resource is not available in this workspace.',
+            409 => 'The integration changed concurrently. Reload metadata before retrying.',
+            412 => 'The integration precondition is stale. Reload metadata before retrying.',
             413 => 'Integration requests must not exceed 16 KiB.', 415 => 'Use application/json.',
             422 => 'Check the destination, secret length, name, expiry and scopes.', 429 => 'Too many requests. Wait before retrying.'];
+        $noCommitMessages = [
+            'data_plane_authentication_failed' => 'No change was committed because data-plane authentication is unavailable.',
+            'management_audit_unavailable' => 'No change was committed because its audit could not be stored.',
+            'webhooks_disabled' => 'No change was committed because webhook management is not available.',
+            'service_unavailable' => 'No change was committed because service-token management is not available.',
+        ];
+        $noCommitMessage = $noCommitCode !== null ? ($noCommitMessages[$noCommitCode] ?? null) : null;
         $safeStatus = array_key_exists($status, $messages) || in_array($status, [500, 502, 503, 504], true) ? $status : 502;
         return $this->privateResponse(new JsonResponse(['error' => [
-            'code' => $auditUnavailable ? 'management_audit_unavailable' : 'integration_request_failed',
-            'message' => $auditUnavailable ? 'No change was committed because its audit could not be stored.' : ($messages[$safeStatus] ?? 'The outcome may be uncertain. Reload metadata and reconcile before retrying; do not create another credential blindly.'),
+            'code' => $noCommitMessage !== null ? $noCommitCode : 'integration_request_failed',
+            'message' => $noCommitMessage ?? ($messages[$safeStatus] ?? 'The outcome may be uncertain. Reload metadata and reconcile before retrying; do not create another credential blindly.'),
         ]], $safeStatus));
     }
 

@@ -55,11 +55,86 @@ test('uncertain issuance blocks retry; refreshed membership blocks integration a
   await page.locator('#integration-uncertain').waitFor();
   assert.equal(await page.getByRole('button', { name: 'Create scoped token' }).isDisabled(), true);
   assert.equal(mutations, 1);
+  await page.route(`**/api/control-plane/forms/${FORM_ID}/webhook`, route => route.fulfill({ json: { data: {
+    formId: FORM_ID, enabled: false, origin: 'https://receiver.example', updatedAt: '2026-08-30T12:00:00Z',
+  } } }));
+  await page.getByRole('button', { name: /Contact us/ }).click();
+  await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
+  await page.getByText('Paused for future submissions', { exact: false }).waitFor();
+  assert.equal(await page.locator('#pause-webhook').textContent(), 'Resume future deliveries');
   data.role = 'member';
   await page.getByRole('button', { name: 'Reload token metadata' }).click();
   await page.getByText('member · Server-authorized workspace').waitFor();
   assert.equal(await page.locator('#tokens-panel').isVisible(), false);
   assert.equal(await page.locator('#manage-tokens').isDisabled(), true);
+  assert.equal(await page.locator('#webhook-state').textContent(), 'Load this form’s webhook to see its current state.');
+  assert.equal(await page.locator('#pause-webhook').textContent(), 'Pause future deliveries');
+  data.role = 'owner';
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByText('owner · Server-authorized workspace').waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'I have reconciled the change' }).click();
+  assert.equal(await page.locator('#pause-webhook').isDisabled(), true, 'Purged webhook state must not revive with authorization');
+});
+
+test('proxied assertion failure is a definite no-op and does not expire the PHP session', async t => {
+  const { page } = await fixture(t);
+  await page.route('**/api/control-plane/service-tokens', route => route.fulfill(route.request().method() === 'GET' ?
+    { json: { data: [] } } : { status: 502, json: { error: { code: 'data_plane_authentication_failed' } } }));
+  await prepareToken(page);
+  await page.getByRole('button', { name: 'Create scoped token' }).click();
+  await page.getByText('data-plane authentication is unavailable', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+  assert.equal(await page.locator('#token-fields').isDisabled(), false);
+  assert.equal(await page.locator('#new-form').isDisabled(), false);
+  assert.equal(await page.getByRole('link', { name: 'Sign in again' }).isVisible(), false);
+});
+
+test('definite mutation rejections do not require uncertain-outcome acknowledgement', async t => {
+  const { page } = await fixture(t); let tokenStatus = 503;
+  await page.route('**/api/control-plane/service-tokens', async route => {
+    if (route.request().method() === 'GET') { await route.fulfill({ json: { data: [] } }); return; }
+    await route.fulfill({ status: tokenStatus, json: { error: { code: tokenStatus === 503 ? 'service_unavailable' : 'conflict' } } });
+  });
+  await prepareToken(page);
+  await page.getByRole('button', { name: 'Create scoped token' }).click();
+  await page.getByText('service-token management is not available', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+  assert.equal(await page.locator('#token-fields').isDisabled(), false);
+
+  tokenStatus = 409;
+  await page.locator('#token-name').fill('Conflict fixture');
+  await page.getByLabel('forms:read', { exact: true }).check();
+  await page.locator('#token-warning').check();
+  await page.getByRole('button', { name: 'Create scoped token' }).click();
+  await page.getByText('changed concurrently', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+
+  let webhookStatus = 503;
+  await page.route(`**/api/control-plane/forms/${FORM_ID}/webhook`, async route => {
+    if (route.request().method() === 'GET') { await route.fulfill({ status: 404, json: { error: { code: 'not_found' } } }); return; }
+    await route.fulfill({ status: webhookStatus, json: { error: { code: webhookStatus === 503 ? 'webhooks_disabled' : 'precondition_failed' } } });
+  });
+  await page.getByRole('button', { name: /Contact us/ }).click();
+  await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
+  await page.getByText('No webhook endpoint is configured', { exact: false }).waitFor();
+  await page.locator('#webhook-url').fill('https://receiver.example/hook');
+  await page.locator('#webhook-secret').fill('b'.repeat(32));
+  await page.locator('#receiver-ready').check();
+  await page.getByRole('button', { name: 'Save complete webhook configuration' }).click();
+  await page.getByText('webhook management is not available', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+  assert.equal(await page.locator('#webhook-fields').isDisabled(), false);
+
+  webhookStatus = 412;
+  await page.locator('#webhook-secret').fill('c'.repeat(32));
+  await page.locator('#receiver-ready').check();
+  await page.getByRole('button', { name: 'Save complete webhook configuration' }).click();
+  await page.getByText('precondition is stale', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+  assert.equal(await page.locator('#webhook-fields').isDisabled(), false);
 });
 
 test('webhook pause and rotation send narrow JSON patches with explicit snapshot warnings', async t => {

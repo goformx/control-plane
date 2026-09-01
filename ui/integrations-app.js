@@ -20,11 +20,16 @@ export function initIntegrations({ context, verifyWorkspace }) {
     revealed = ''; $('issued-token').value = ''; $('token-reveal').hidden = true; clearTimeout(revealTimer);
     for (const url of urls) URL.revokeObjectURL(url); urls.clear();
   }
+  function clearWebhook() {
+    webhook = null; webhookLoaded = false;
+    $('webhook-state').textContent = 'Load this form’s webhook to see its current state.';
+    $('pause-webhook').textContent = 'Pause future deliveries';
+  }
   function reset() {
     uncertain ||= mutationPending;
     generation++; controller?.abort(); controller = null; busy = false; mutationPending = false;
-    clearReveal(); webhook = null; webhookLoaded = false;
-    $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren(); $('webhook-state').textContent = 'Load this form’s webhook to see its current state.';
+    clearReveal(); clearWebhook();
+    $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren();
     $('webhook-settings').reset(); $('integration-error').hidden = true; $('integration-error').textContent = ''; message('');
     controls();
   }
@@ -43,7 +48,7 @@ export function initIntegrations({ context, verifyWorkspace }) {
     $('integration-uncertain').hidden = !uncertain;
     $('acknowledge-integration').disabled = locked;
     for (const id of ['token-list', 'webhook-deliveries']) for (const button of $(id).querySelectorAll('button')) button.disabled = locked || (id === 'webhook-deliveries' && uncertain);
-    if (!allowed()) { clearReveal(); $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren(); $('webhook-settings').reset(); }
+    if (!allowed()) { clearReveal(); clearWebhook(); $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren(); $('webhook-settings').reset(); }
   }
   async function request(path, { method = 'GET', body } = {}) {
     const headers = { Accept: 'application/json' };
@@ -65,11 +70,20 @@ export function initIntegrations({ context, verifyWorkspace }) {
     mutationPending = false;
     if (!response.ok) {
       if (response.status === 401) context().sessionExpired = true;
-      const auditFailure = response.status === 503 && payload?.error?.code === 'management_audit_unavailable';
-      uncertain ||= method !== 'GET' && response.status >= 500 && !auditFailure;
+      const noCommitMessages = {
+        data_plane_authentication_failed: 'No change was committed because data-plane authentication is unavailable.',
+        management_audit_unavailable: 'No change was committed because its audit could not be stored.',
+        webhooks_disabled: 'No change was committed because webhook management is not available.',
+        service_unavailable: 'No change was committed because service-token management is not available.',
+      };
+      const noCommitStatuses = { data_plane_authentication_failed: 502, management_audit_unavailable: 503, webhooks_disabled: 503, service_unavailable: 503 };
+      const noCommit = noCommitStatuses[payload?.error?.code] === response.status;
+      uncertain ||= method !== 'GET' && response.status >= 500 && !noCommit;
       const messages = { 400: 'Check the integration settings and selected scopes.', 401: 'Sign in again.', 403: 'Your current workspace role cannot manage integrations.',
-        404: 'The integration resource was not found in this workspace.', 413: 'The settings exceed the supported size.', 422: 'Check the destination, secret length, name, expiry and scopes.', 429: 'Too many requests. Wait before retrying.' };
-      const error = new Error(auditFailure ? 'No change was committed because its audit could not be stored.' : (messages[response.status] ?? 'The outcome may be uncertain. Reload metadata and reconcile before retrying.'));
+        404: 'The integration resource was not found in this workspace.', 409: 'The integration changed concurrently. Reload metadata before retrying.',
+        412: 'The integration precondition is stale. Reload metadata before retrying.', 413: 'The settings exceed the supported size.',
+        422: 'Check the destination, secret length, name, expiry and scopes.', 429: 'Too many requests. Wait before retrying.' };
+      const error = new Error(noCommit ? noCommitMessages[payload.error.code] : (messages[response.status] ?? 'The outcome may be uncertain. Reload metadata and reconcile before retrying.'));
       error.status = response.status; throw error;
     }
     return payload;

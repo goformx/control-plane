@@ -127,6 +127,43 @@ final class IntegrationWorkflowTest extends TestCase
         }
     }
 
+    #[DataProvider('downstreamErrors')]
+    public function testDownstreamErrorsPreserveSessionAndMutationOutcomeSemantics(
+        int $downstreamStatus,
+        string $downstreamCode,
+        int $expectedStatus,
+        string $expectedCode,
+        string $expectedMessage,
+        bool $uncertain,
+    ): void {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createStub(ManagementApiClientInterface::class);
+        $client->method('request')->willReturn(new HttpResponse($downstreamStatus,
+            json_encode(['error' => ['code' => $downstreamCode, 'message' => 'server-secret-canary']])));
+
+        $response = (new ManagementIntegrationsController($resolver, $client))->handle(
+            $this->request(IntegrationOperation::PutWebhook), IntegrationOperation::PutWebhook);
+        $payload = json_decode($response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame($expectedStatus, $response->getStatusCode());
+        self::assertSame($expectedCode, $payload['error']['code']);
+        self::assertStringContainsString($expectedMessage, $payload['error']['message']);
+        self::assertSame($uncertain, str_contains($payload['error']['message'], 'uncertain'));
+        self::assertStringNotContainsString('server-secret-canary', $response->getContent());
+    }
+
+    public static function downstreamErrors(): iterable
+    {
+        yield 'Go assertion 401 is a definite no-op, not a PHP session failure' => [401, 'invalid_first_party_assertion', 502, 'data_plane_authentication_failed', 'No change was committed', false];
+        yield 'concurrent conflict is a definite rejection' => [409, 'conflict', 409, 'integration_request_failed', 'concurrently', false];
+        yield 'stale precondition is a definite rejection' => [412, 'precondition_failed', 412, 'integration_request_failed', 'precondition is stale', false];
+        yield 'audit failure commits nothing' => [503, 'management_audit_unavailable', 503, 'management_audit_unavailable', 'No change was committed', false];
+        yield 'disabled webhooks commit nothing' => [503, 'webhooks_disabled', 503, 'webhooks_disabled', 'No change was committed', false];
+        yield 'missing token service commits nothing' => [503, 'service_unavailable', 503, 'service_unavailable', 'No change was committed', false];
+        yield 'unknown outage remains uncertain' => [503, 'unknown_outage', 503, 'integration_request_failed', 'uncertain', true];
+    }
+
     private function context(OrganizationRole $role): OrganizationRequestContext
     {
         return new OrganizationRequestContext(new AuthenticatedAccount(7, self::SUBJECT, 'Person', $this->createStub(EntityInterface::class)), new OrganizationContext(self::ORGANIZATION, 'Workspace', $role));
