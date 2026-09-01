@@ -91,11 +91,28 @@ test('proxied assertion failure is a definite no-op and does not expire the PHP 
   assert.equal(await page.getByRole('link', { name: 'Sign in again' }).isVisible(), false);
 });
 
+test('delivery-history assertion failure does not latch a valid workspace read-only', async t => {
+  const { page } = await fixture(t);
+  await page.route(`**/api/control-plane/forms/${FORM_ID}/deliveries`, route => route.fulfill({
+    status: 502, json: { error: { code: 'data_plane_authentication_failed' } },
+  }));
+  await page.getByRole('button', { name: /Contact us/ }).click();
+  await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Load delivery history' }).click();
+  await page.getByText('Data-plane authentication is unavailable.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.waitForFunction(() => !document.getElementById('refresh').disabled);
+  assert.equal(await page.locator('#new-form').isDisabled(), false);
+  assert.equal(await page.locator('#read-only').isVisible(), false);
+  assert.equal(await page.getByRole('link', { name: 'Sign in again' }).isVisible(), false);
+});
+
 test('definite mutation rejections do not require uncertain-outcome acknowledgement', async t => {
   const { page } = await fixture(t); let tokenStatus = 503;
   await page.route('**/api/control-plane/service-tokens', async route => {
     if (route.request().method() === 'GET') { await route.fulfill({ json: { data: [] } }); return; }
-    await route.fulfill({ status: tokenStatus, json: { error: { code: tokenStatus === 503 ? 'service_unavailable' : 'conflict' } } });
+    const code = tokenStatus === 503 ? 'service_unavailable' : tokenStatus === 403 ? 'data_plane_access_denied' : 'conflict';
+    await route.fulfill({ status: tokenStatus, json: { error: { code } } });
   });
   await prepareToken(page);
   await page.getByRole('button', { name: 'Create scoped token' }).click();
@@ -109,6 +126,11 @@ test('definite mutation rejections do not require uncertain-outcome acknowledgem
   await page.locator('#token-warning').check();
   await page.getByRole('button', { name: 'Create scoped token' }).click();
   await page.getByText('changed concurrently', { exact: false }).waitFor();
+  assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
+
+  tokenStatus = 403;
+  await page.getByRole('button', { name: 'Create scoped token' }).click();
+  await page.getByText('data plane denied this integration operation', { exact: false }).waitFor();
   assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
 
   let webhookStatus = 503;

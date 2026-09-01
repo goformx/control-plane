@@ -12,6 +12,7 @@ use App\Infrastructure\GoFormX\ManagementApiClientInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\Uid\Uuid;
 
 final readonly class ManagementIntegrationsController
 {
@@ -44,6 +45,7 @@ final readonly class ManagementIntegrationsController
             $downstream = $this->client->request($operation->method(), $path, $context->account->subjectId,
                 $context->organization->organizationId, $scopes, $body);
             if (strlen($downstream->body) > 262144) { throw new \UnexpectedValueException(); }
+            $headers = array_change_key_case($downstream->headers, CASE_LOWER);
             if ($downstream->statusCode >= 400) {
                 $payload = json_decode($downstream->body, true);
                 $downstreamCode = is_string($payload['error']['code'] ?? null) ? $payload['error']['code'] : null;
@@ -52,29 +54,31 @@ final readonly class ManagementIntegrationsController
                     ($downstream->statusCode === 503 && in_array($downstreamCode,
                         ['management_audit_unavailable', 'webhooks_disabled', 'service_unavailable'], true) ? $downstreamCode : null);
                 // A 401 here is from Go's first-party assertion boundary, not the browser's PHP session.
-                return $this->error($assertionFailure ? 502 : $downstream->statusCode, $noCommitCode);
+                return $this->safeDownstreamHeaders($this->error($assertionFailure ? 502 : $downstream->statusCode,
+                    $noCommitCode, true), $headers, $downstream->statusCode);
             }
             $expectedStatus = match ($operation) {
                 IntegrationOperation::CreateToken => 201, IntegrationOperation::ReplayDelivery => 202,
                 IntegrationOperation::RevokeToken, IntegrationOperation::DeleteWebhook => 204, default => 200,
             };
             if ($downstream->statusCode !== $expectedStatus) { throw new \UnexpectedValueException(); }
-            if ($expectedStatus === 204) { return $this->privateResponse(new Response('', 204)); }
-            $headers = array_change_key_case($downstream->headers, CASE_LOWER);
+            if ($expectedStatus === 204) { return $this->safeDownstreamHeaders($this->privateResponse(new Response('', 204)),
+                $headers, $downstream->statusCode); }
             if (strtolower(trim(explode(';', $headers['content-type'] ?? '')[0])) !== 'application/json') { throw new \UnexpectedValueException(); }
             try { $payload = json_decode($downstream->body, true, 32, JSON_THROW_ON_ERROR); }
             catch (\JsonException) { throw new \UnexpectedValueException(); }
-            return $this->privateResponse(new JsonResponse(IntegrationResponse::project($operation, $payload,
-                $context->organization->organizationId, $form, $delivery), $expectedStatus));
+            return $this->safeDownstreamHeaders($this->privateResponse(new JsonResponse(IntegrationResponse::project($operation, $payload,
+                $context->organization->organizationId, $form, $delivery), $expectedStatus)), $headers, $downstream->statusCode);
         } catch (OrganizationAccessDenied) { return $this->error(403);
         } catch (\InvalidArgumentException|\JsonException) { return $this->error(400);
         } catch (\Throwable) { return $this->error(502); }
     }
 
-    private function error(int $status, ?string $noCommitCode = null): Response
+    private function error(int $status, ?string $noCommitCode = null, bool $downstream = false): Response
     {
         $messages = [400 => 'Check the integration request and selected scopes.', 401 => 'Sign in again.',
-            403 => 'Your current workspace membership does not allow integration management.', 404 => 'The integration resource is not available in this workspace.',
+            403 => $downstream ? 'The data plane denied this integration operation.' : 'Your current workspace membership does not allow integration management.',
+            404 => 'The integration resource is not available in this workspace.',
             409 => 'The integration changed concurrently. Reload metadata before retrying.',
             412 => 'The integration precondition is stale. Reload metadata before retrying.',
             413 => 'Integration requests must not exceed 16 KiB.', 415 => 'Use application/json.',
@@ -87,10 +91,22 @@ final readonly class ManagementIntegrationsController
         ];
         $noCommitMessage = $noCommitCode !== null ? ($noCommitMessages[$noCommitCode] ?? null) : null;
         $safeStatus = array_key_exists($status, $messages) || in_array($status, [500, 502, 503, 504], true) ? $status : 502;
+        $errorCode = $noCommitMessage !== null ? $noCommitCode : ($downstream && $safeStatus === 403 ? 'data_plane_access_denied' : 'integration_request_failed');
         return $this->privateResponse(new JsonResponse(['error' => [
-            'code' => $noCommitMessage !== null ? $noCommitCode : 'integration_request_failed',
+            'code' => $errorCode,
             'message' => $noCommitMessage ?? ($messages[$safeStatus] ?? 'The outcome may be uncertain. Reload metadata and reconcile before retrying; do not create another credential blindly.'),
         ]], $safeStatus));
+    }
+
+    /** @param array<string, string> $headers */
+    private function safeDownstreamHeaders(Response $response, array $headers, int $status): Response
+    {
+        $trace = $headers['x-trace-id'] ?? '';
+        if (Uuid::isValid($trace)) { $response->headers->set('X-Trace-Id', $trace); }
+        if ($status === 429 && preg_match('/\A[1-9][0-9]{0,2}\z/', $headers['retry-after'] ?? '') === 1) {
+            $response->headers->set('Retry-After', $headers['retry-after']);
+        }
+        return $response;
     }
 
     private function privateResponse(Response $response): Response

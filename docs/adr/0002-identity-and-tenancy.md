@@ -87,10 +87,12 @@ requires live session-to-API tests for these boundaries before completion.
 
 Active owners and admins may list/create/revoke external service tokens and
 read/configure/pause/resume/rotate/delete webhooks or replay a dead-letter delivery.
-Members may not perform these operations. `IntegrationOperation` owns this policy,
-the route/method and required scope. Every call resolves live membership, and every
-mutation requires session CSRF. Browser credential, role and organization headers
-are not authority. Go checks resource ownership again.
+Members may not perform these operations. `IntegrationOperation` owns token and
+webhook-configuration mutations plus replay. The bounded delivery-history read
+remains `SubmissionOperation::Deliveries` because the canonical API assigns it
+`submissions:read`; it applies the same owner/admin policy and fresh membership
+resolution. Every mutation requires session CSRF. Browser credential, role and
+organization headers are not authority. Go checks resource ownership again.
 
 Token creation is delegation, not a blanket privileged assertion. The server
 validates the selected scopes against the canonical enum, rejects duplicates and

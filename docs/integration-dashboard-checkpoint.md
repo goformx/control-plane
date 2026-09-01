@@ -30,10 +30,10 @@ request, pending independent review.
 
 ## Local verification
 
-- `php vendor/bin/phpunit --no-coverage`: 163 tests, 1,405 assertions passed
+- `php vendor/bin/phpunit --no-coverage`: 173 tests, 1,455 assertions passed
   (configured Unit and Integration suites, not the separate acceptance test).
 - `npm run build` and `npm run check`: generated asset matches; 11 UI tests pass.
-- `npm run test:browser`: 17 tests pass using pinned Playwright Chromium.
+- `npm run test:browser`: 20 tests pass using pinned Playwright Chromium.
 - Strict site doctor: zero findings. Architecture contract: 1 test, 3 assertions.
 - `composer validate --strict` and `git diff --check`: pass.
 - `php bin/maintenance/site-verify`: fails at the generated acceptance test's
@@ -42,6 +42,10 @@ request, pending independent review.
 - During verification, rejected numeric-key JSON objects masquerading as scope
   arrays, corrected route-test imports, and preserved the generated AGENTS.md
   end-of-file bytes outside its extension region.
+- Independent review corrections preserve definite downstream mutation outcomes,
+  keep data-plane assertion failures separate from PHP session expiry across both
+  integration and delivery-history routes, purge webhook state after role loss,
+  and retain validated trace/rate-limit response headers.
 
 ## Remaining work and review concerns
 

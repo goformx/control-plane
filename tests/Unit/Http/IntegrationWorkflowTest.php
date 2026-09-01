@@ -158,10 +158,36 @@ final class IntegrationWorkflowTest extends TestCase
         yield 'Go assertion 401 is a definite no-op, not a PHP session failure' => [401, 'invalid_first_party_assertion', 502, 'data_plane_authentication_failed', 'No change was committed', false];
         yield 'concurrent conflict is a definite rejection' => [409, 'conflict', 409, 'integration_request_failed', 'concurrently', false];
         yield 'stale precondition is a definite rejection' => [412, 'precondition_failed', 412, 'integration_request_failed', 'precondition is stale', false];
+        yield 'downstream denial is not blamed on PHP membership' => [403, 'forbidden', 403, 'data_plane_access_denied', 'data plane denied', false];
         yield 'audit failure commits nothing' => [503, 'management_audit_unavailable', 503, 'management_audit_unavailable', 'No change was committed', false];
         yield 'disabled webhooks commit nothing' => [503, 'webhooks_disabled', 503, 'webhooks_disabled', 'No change was committed', false];
         yield 'missing token service commits nothing' => [503, 'service_unavailable', 503, 'service_unavailable', 'No change was committed', false];
         yield 'unknown outage remains uncertain' => [503, 'unknown_outage', 503, 'integration_request_failed', 'uncertain', true];
+    }
+
+    public function testSafeCorrelationAndRetryHeadersSurviveTheIntegrationProjection(): void
+    {
+        $trace = '55555555-5555-4555-8555-555555555555';
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $client->expects(self::exactly(2))->method('request')->willReturnOnConsecutiveCalls(
+            new HttpResponse(200, json_encode(['data' => [$this->token()]]), [
+                'content-type' => 'application/json', 'x-trace-id' => $trace, 'retry-after' => 'private-canary',
+            ]),
+            new HttpResponse(429, '{"error":{"code":"rate_limited"}}', [
+                'x-trace-id' => $trace, 'retry-after' => '7', 'set-cookie' => 'private-canary',
+            ]),
+        );
+        $controller = new ManagementIntegrationsController($resolver, $client);
+
+        $success = $controller->handle($this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens);
+        self::assertSame($trace, $success->headers->get('X-Trace-Id'));
+        self::assertFalse($success->headers->has('Retry-After'));
+        $limited = $controller->handle($this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens);
+        self::assertSame($trace, $limited->headers->get('X-Trace-Id'));
+        self::assertSame('7', $limited->headers->get('Retry-After'));
+        self::assertFalse($limited->headers->has('Set-Cookie'));
     }
 
     private function context(OrganizationRole $role): OrganizationRequestContext
