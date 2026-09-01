@@ -4,10 +4,10 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build-ui.mjs",
-    "check": "node scripts/build-ui.mjs --check && node --test tests/UI/*.test.mjs",
+    "check": "node scripts/build-ui.mjs --check && node scripts/check-browser-live.mjs && node --test tests/UI/*.test.mjs",
     "test:browser": "node --test tests/Browser/*.test.mjs",
-    "test:live": "node --test tests/BrowserLive/forms-live.test.mjs",
-    "test:live:integrations": "node --test tests/BrowserLive/integrations-live.test.mjs"
+    "test:live": "node --test tests/BrowserLive/forms-*.test.mjs",
+    "test:live:integrations": "node --test tests/BrowserLive/integrations-*.test.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "6.0.2",

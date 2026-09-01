@@ -100,6 +100,10 @@ jobs:
             fi
             printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
           done <<< "$custody"
+
+      - name: Generate ephemeral webhook custody
+        if: matrix.suite == 'integrations'
+        run: |
           webhook_key="$(openssl rand -base64 32 | tr -d '\n')"
           echo "::add-mask::$webhook_key"
           printf 'GOFORMX_WEBHOOK_KEYRING={"ci":"%s"}\n' "$webhook_key" >> "$GITHUB_ENV"
@@ -130,8 +134,8 @@ jobs:
           FIRST_PARTY_ASSERTION_ENABLED: 'true'
           FIRST_PARTY_ASSERTION_ISSUER: https://goformx.com
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
-          WEBHOOK_ENABLED: 'true'
-          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ci
+          WEBHOOK_ENABLED: ${{ matrix.suite == 'integrations' && 'true' || 'false' }}
+          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ matrix.suite == 'integrations' && 'ci' || '' }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \

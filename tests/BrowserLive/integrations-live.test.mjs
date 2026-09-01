@@ -35,9 +35,10 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   };
 
   const users = JSON.parse(fixture({ action: 'create' }));
-  const browser = await chromium.launch();
+  const browserServer = await chromium.launchServer();
+  const browser = await chromium.connect(browserServer.wsEndpoint());
   t.after(async () => {
-    try { await browser.close(); }
+    try { await browserServer.kill(); }
     finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }) => ({ id, subject })) }); }
   });
   const page = await browser.newPage();
@@ -47,12 +48,25 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   page.on('request', request => { if (request.headers().authorization) leaked.push(request.url()); });
 
   const loginPage = await page.goto(uiUrl + '/login');
-  assert.equal(loginPage.status(), 200);
+  assert.equal(loginPage.status(), 200, `Login page HTTP ${loginPage.status()}; rate-limit remaining=${loginPage.headers()['x-ratelimit-remaining'] ?? 'absent'}, retry-after=${loginPage.headers()['retry-after'] ?? 'absent'}`);
   await page.getByLabel('Email', { exact: true }).fill(users[0].email);
   await page.getByLabel('Password', { exact: true }).fill(users[0].password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(uiUrl + '/app');
-  await page.getByText('owner · Server-authorized workspace').waitFor();
+  try { await page.getByText('owner · Server-authorized workspace').waitFor(); }
+  catch {
+    const detail = await page.locator('#error-message').textContent();
+    throw new Error(`Workspace initialization failed: ${detail}; credentials and raw responses withheld.`);
+  }
+  async function waitForIntegration(text, options = {}) {
+    return Promise.race([
+      page.getByText(text, options).waitFor(),
+      page.locator('#integration-error:not([hidden])').waitFor().then(async () => {
+        const detail = await page.locator('#integration-error').textContent();
+        throw new Error(`Integration workflow failed: ${detail}`);
+      }),
+    ]);
+  }
 
   const formName = `integration-${randomUUID()}`;
   await page.getByRole('button', { name: '+ New form', exact: true }).click();
@@ -68,12 +82,17 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
 
   const integrationName = `browser-token-${randomUUID()}`;
   await page.getByRole('button', { name: 'Manage API access' }).click();
-  await page.getByText('No token metadata returned.', { exact: true }).waitFor();
+  await waitForIntegration('No token metadata returned.', { exact: true });
   await page.locator('#token-name').fill(integrationName);
   await page.getByLabel('forms:read', { exact: true }).check();
   await page.locator('#token-warning').check();
   await page.getByRole('button', { name: 'Create scoped token' }).click();
-  await page.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor();
+  await Promise.race([
+    page.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor(),
+    page.locator('#integration-error:not([hidden])').waitFor().then(async () => {
+      throw new Error(`Integration workflow failed: ${await page.locator('#integration-error').textContent()}`);
+    }),
+  ]);
   const externalToken = await page.locator('#issued-token').inputValue();
   assert.ok(/^gfst_[A-Za-z0-9_-]{43}$/.test(externalToken), 'Issued token shape mismatched; value withheld.');
   const beforeRevoke = await fetch(`${apiUrl}/v1/forms?limit=25&offset=0`, {
@@ -82,10 +101,10 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   assert.equal(beforeRevoke.status, 200);
   assert.ok((await beforeRevoke.text()).includes(owned.id), 'Scoped token did not return the owned form; body withheld.');
   await page.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
-  await page.getByText(`${integrationName} · active`, { exact: true }).waitFor();
+  await waitForIntegration(`${integrationName} · active`, { exact: true });
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: `Revoke ${integrationName}`, exact: true }).click();
-  await page.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
+  await waitForIntegration('Token revoked. It cannot authenticate new API requests.', { exact: true });
   const afterRevoke = await fetch(`${apiUrl}/v1/forms?limit=25&offset=0`, {
     headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
   });
@@ -93,31 +112,34 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   await afterRevoke.text();
 
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
-  await page.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
+  await waitForIntegration('No webhook endpoint is configured for this form.', { exact: true });
   // The real data plane resolves destinations as an SSRF defense. This public
   // documentation origin receives no traffic because this draft has no submissions.
   await page.locator('#webhook-url').fill('https://example.com/hooks/goformx');
   await page.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
   await page.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
   await page.locator('#receiver-ready').check();
+  const projectedWebhook = page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname.endsWith(`/forms/${owned.id}/webhook`));
   await page.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
-  await page.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
-  assert.equal(await page.locator('#webhook-secret').inputValue(), '');
-  assert.equal(await page.locator('#webhook-headers').inputValue(), '');
+  const projectedBody = await (await projectedWebhook).json();
+  assert.deepEqual(Object.keys(projectedBody.data).sort(), ['enabled', 'formId', 'origin', 'updatedAt']);
+  assert.ok(!JSON.stringify(projectedBody).includes('browser-live-original-signing-key-123456'), 'Projected webhook response exposed its signing secret.');
+  assert.ok(!JSON.stringify(projectedBody).includes('X-Receiver-Fixture'), 'Projected webhook response exposed write-only headers.');
+  await waitForIntegration('Enabled for future submissions · https://example.com', { exact: false });
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
-  await page.getByText('Paused for future submissions · https://example.com', { exact: false }).waitFor();
+  await waitForIntegration('Paused for future submissions · https://example.com', { exact: false });
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Resume future deliveries', exact: true }).click();
-  await page.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
+  await waitForIntegration('Enabled for future submissions · https://example.com', { exact: false });
   await page.locator('#webhook-secret').fill('browser-live-rotated-signing-key-123456');
   await page.locator('#receiver-ready').check();
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Rotate signing secret only', exact: true }).click();
-  await page.getByText('Signing secret rotated for future deliveries.', { exact: false }).waitFor();
+  await waitForIntegration('Signing secret rotated for future deliveries.', { exact: false });
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Remove webhook endpoint', exact: true }).click();
-  await page.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
+  await waitForIntegration('No webhook endpoint is configured for this form.', { exact: true });
 
   const durable = dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName });
   assert.deepEqual([durable.activeTokenCount, durable.revokedTokenCount, durable.webhookEndpointCount], [0, 1, 0]);

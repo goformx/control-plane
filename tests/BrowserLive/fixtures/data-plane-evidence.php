@@ -3,13 +3,13 @@
 declare(strict_types=1);
 
 // CLI-only, read-only evidence query for the disposable PostgreSQL rehearsal.
-function rejectEvidenceInput(string $stage): never
+function rejectEvidenceInput(string $stage, int $line): never
 {
     fwrite(STDERR, json_encode([
         'stage' => $stage,
         'exception' => 'None',
         'file' => basename(__FILE__),
-        'line' => __LINE__,
+        'line' => $line,
     ], JSON_THROW_ON_ERROR));
     exit(2);
 }
@@ -20,7 +20,7 @@ $databasePassword = getenv('GOFORMX_EVIDENCE_PASSWORD');
 if (PHP_SAPI !== 'cli' || getenv('GOFORMX_BROWSER_REHEARSAL') !== '1' || getenv('APP_ENV') !== 'local'
     || !is_string($dsn) || $dsn === '' || !is_string($databaseUser) || $databaseUser === ''
     || !is_string($databasePassword) || $databasePassword === '') {
-    rejectEvidenceInput('guard');
+    rejectEvidenceInput('guard', __LINE__);
 }
 
 $stage = 'input';
@@ -31,7 +31,7 @@ try {
     $tokenName = is_string($input['tokenName'] ?? null) ? $input['tokenName'] : '';
     $uuid = '/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i';
     if (!preg_match($uuid, $organizationId) || !preg_match($uuid, $formId) || !preg_match('/^browser-token-[0-9a-f-]{36}$/', $tokenName)) {
-        rejectEvidenceInput('input');
+        rejectEvidenceInput('input', __LINE__);
     }
 
     $stage = 'connect';
