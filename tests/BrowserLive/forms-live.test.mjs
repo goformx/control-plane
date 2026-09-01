@@ -120,71 +120,6 @@ test('real browser login → create → publish → integrations → submission,
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);
-  const organizationId = await owner.evaluate(async () => (await (await fetch('/api/control-plane/context')).json()).data.id);
-  const integrationName = `browser-token-${randomUUID()}`;
-  await owner.getByRole('button', { name: 'Manage API access' }).click();
-  await owner.getByText('No token metadata returned.', { exact: true }).waitFor();
-  await owner.locator('#token-name').fill(integrationName);
-  await owner.getByLabel('forms:read', { exact: true }).check();
-  await owner.locator('#token-warning').check();
-  await owner.getByRole('button', { name: 'Create scoped token' }).click();
-  await owner.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor();
-  const externalToken = await owner.locator('#issued-token').inputValue();
-  assert.match(externalToken, /^gfst_[A-Za-z0-9_-]{43}$/);
-  const externalBeforeRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
-    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
-  });
-  assert.equal(externalBeforeRevoke.status, 200);
-  assert.match(await externalBeforeRevoke.text(), new RegExp(owned.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-  await owner.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
-  await owner.getByText(`${integrationName} · active`, { exact: true }).waitFor();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: `Revoke ${integrationName}`, exact: true }).click();
-  await owner.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
-  const externalAfterRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
-    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
-  });
-  assert.equal(externalAfterRevoke.status, 401);
-  await externalAfterRevoke.text();
-
-  await owner.getByRole('button', { name: 'Load webhook', exact: true }).click();
-  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
-  // The real data plane resolves destinations as an SSRF defense. Use a public
-  // documentation origin; the endpoint is deleted before another submission.
-  await owner.locator('#webhook-url').fill('https://example.com/hooks/goformx');
-  await owner.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
-  await owner.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
-  await owner.locator('#receiver-ready').check();
-  await owner.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
-  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
-  assert.equal(await owner.locator('#webhook-headers').inputValue(), '');
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
-  await owner.getByText('Paused for future submissions · https://example.com', { exact: false }).waitFor();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Resume future deliveries', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
-  await owner.locator('#webhook-secret').fill('browser-live-rotated-signing-key-123456');
-  await owner.locator('#receiver-ready').check();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Rotate signing secret only', exact: true }).click();
-  await owner.getByText('Signing secret rotated for future deliveries.', { exact: false }).waitFor();
-  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Remove webhook endpoint', exact: true }).click();
-  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
-  await owner.getByText('Endpoint removed. Accepted deliveries are retained.', { exact: true }).waitFor();
-  const durable = dataPlaneEvidence({ organizationId, formId: owned.id, tokenName: integrationName });
-  assert.equal(durable.activeTokenCount, 0);
-  assert.equal(durable.revokedTokenCount, 1);
-  assert.equal(durable.webhookEndpointCount, 0);
-  assert.deepEqual(durable.events.map(event => event.event), [
-    'service_token.created', 'service_token.revoked', 'webhook.created', 'webhook.paused',
-    'webhook.resumed', 'webhook.signing_secret_rotated', 'webhook.deleted',
-  ]);
-  assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
-  assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
   // Publishing a different policy must not reinterpret an already accepted row.
   const newer = parseJSON(stringify(revised));
   newer.properties.exactInteger.title = 'Newer integer label';
@@ -236,4 +171,72 @@ test('real browser login → create → publish → integrations → submission,
     return responses.map(response => ({ status: response.status, attachment: response.headers.get('Content-Disposition') }));
   }, { form: owned.id, submission: submission.first.data.id });
   assert.deepEqual(deniedSubmissions, Array.from({ length: 3 }, () => ({ status: 404, attachment: null })));
+
+  // Run the integration lifecycle last so it cannot mask the pre-existing form
+  // and tenancy assertions if a management operation regresses shared UI state.
+  const organizationId = await owner.evaluate(async () => (await (await fetch('/api/control-plane/context')).json()).data.id);
+  const integrationName = `browser-token-${randomUUID()}`;
+  await owner.getByRole('button', { name: 'Manage API access' }).click();
+  await owner.getByText('No token metadata returned.', { exact: true }).waitFor();
+  await owner.locator('#token-name').fill(integrationName);
+  await owner.getByLabel('forms:read', { exact: true }).check();
+  await owner.locator('#token-warning').check();
+  await owner.getByRole('button', { name: 'Create scoped token' }).click();
+  await owner.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor();
+  const externalToken = await owner.locator('#issued-token').inputValue();
+  assert.match(externalToken, /^gfst_[A-Za-z0-9_-]{43}$/);
+  const externalBeforeRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
+    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(externalBeforeRevoke.status, 200);
+  assert.match(await externalBeforeRevoke.text(), new RegExp(owned.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  await owner.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
+  await owner.getByText(`${integrationName} · active`, { exact: true }).waitFor();
+  owner.once('dialog', dialog => dialog.accept());
+  await owner.getByRole('button', { name: `Revoke ${integrationName}`, exact: true }).click();
+  await owner.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
+  const externalAfterRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
+    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
+  });
+  assert.equal(externalAfterRevoke.status, 401);
+  await externalAfterRevoke.text();
+
+  await owner.getByRole('button', { name: 'Load webhook', exact: true }).click();
+  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
+  // The real data plane resolves destinations as an SSRF defense. Use a public
+  // documentation origin; no submission follows this configuration lifecycle.
+  await owner.locator('#webhook-url').fill('https://example.com/hooks/goformx');
+  await owner.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
+  await owner.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
+  await owner.locator('#receiver-ready').check();
+  await owner.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
+  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
+  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
+  assert.equal(await owner.locator('#webhook-headers').inputValue(), '');
+  owner.once('dialog', dialog => dialog.accept());
+  await owner.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
+  await owner.getByText('Paused for future submissions · https://example.com', { exact: false }).waitFor();
+  owner.once('dialog', dialog => dialog.accept());
+  await owner.getByRole('button', { name: 'Resume future deliveries', exact: true }).click();
+  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
+  await owner.locator('#webhook-secret').fill('browser-live-rotated-signing-key-123456');
+  await owner.locator('#receiver-ready').check();
+  owner.once('dialog', dialog => dialog.accept());
+  await owner.getByRole('button', { name: 'Rotate signing secret only', exact: true }).click();
+  await owner.getByText('Signing secret rotated for future deliveries.', { exact: false }).waitFor();
+  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
+  owner.once('dialog', dialog => dialog.accept());
+  await owner.getByRole('button', { name: 'Remove webhook endpoint', exact: true }).click();
+  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
+  await owner.getByText('Endpoint removed. Accepted deliveries are retained.', { exact: true }).waitFor();
+  const durable = dataPlaneEvidence({ organizationId, formId: owned.id, tokenName: integrationName });
+  assert.equal(durable.activeTokenCount, 0);
+  assert.equal(durable.revokedTokenCount, 1);
+  assert.equal(durable.webhookEndpointCount, 0);
+  assert.deepEqual(durable.events.map(event => event.event), [
+    'service_token.created', 'service_token.revoked', 'webhook.created', 'webhook.paused',
+    'webhook.resumed', 'webhook.signing_secret_rotated', 'webhook.deleted',
+  ]);
+  assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
+  assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
 });
