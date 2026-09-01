@@ -119,13 +119,21 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   await page.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
   await page.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
   await page.locator('#receiver-ready').check();
-  const projectedWebhook = page.waitForResponse(response => response.request().method() === 'PUT' && new URL(response.url()).pathname.endsWith(`/forms/${owned.id}/webhook`));
   await page.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
-  const projectedBody = await (await projectedWebhook).json();
+  await waitForIntegration('Enabled for future submissions · https://example.com', { exact: false });
+  const projection = await page.evaluate(async formId => {
+    const response = await fetch(`/api/control-plane/forms/${encodeURIComponent(formId)}/webhook`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+    return { status: response.status, text: await response.text() };
+  }, owned.id);
+  assert.equal(projection.status, 200);
+  const projectedText = projection.text;
+  assert.ok(projectedText.length > 0, 'Projected webhook response was empty.');
+  let projectedBody;
+  try { projectedBody = JSON.parse(projectedText); }
+  catch { throw new Error('Projected webhook response was not valid JSON; body withheld.'); }
   assert.deepEqual(Object.keys(projectedBody.data).sort(), ['enabled', 'formId', 'origin', 'updatedAt']);
   assert.ok(!JSON.stringify(projectedBody).includes('browser-live-original-signing-key-123456'), 'Projected webhook response exposed its signing secret.');
   assert.ok(!JSON.stringify(projectedBody).includes('X-Receiver-Fixture'), 'Projected webhook response exposed write-only headers.');
-  await waitForIntegration('Enabled for future submissions · https://example.com', { exact: false });
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
   await waitForIntegration('Paused for future submissions · https://example.com', { exact: false });
