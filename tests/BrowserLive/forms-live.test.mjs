@@ -149,20 +149,22 @@ test('real browser login → create → publish → integrations → submission,
 
   await owner.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
-  await owner.locator('#webhook-url').fill('https://receiver.example/hooks/goformx');
+  // The real data plane resolves destinations as an SSRF defense. Use a public
+  // documentation origin; the endpoint is deleted before another submission.
+  await owner.locator('#webhook-url').fill('https://example.com/hooks/goformx');
   await owner.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
   await owner.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
   await owner.locator('#receiver-ready').check();
   await owner.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://receiver.example', { exact: false }).waitFor();
+  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
   assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
   assert.equal(await owner.locator('#webhook-headers').inputValue(), '');
   owner.once('dialog', dialog => dialog.accept());
   await owner.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
-  await owner.getByText('Paused for future submissions · https://receiver.example', { exact: false }).waitFor();
+  await owner.getByText('Paused for future submissions · https://example.com', { exact: false }).waitFor();
   owner.once('dialog', dialog => dialog.accept());
   await owner.getByRole('button', { name: 'Resume future deliveries', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://receiver.example', { exact: false }).waitFor();
+  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
   await owner.locator('#webhook-secret').fill('browser-live-rotated-signing-key-123456');
   await owner.locator('#receiver-ready').check();
   owner.once('dialog', dialog => dialog.accept());
