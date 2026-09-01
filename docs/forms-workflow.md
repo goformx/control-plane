@@ -40,7 +40,8 @@ use an organization-scoped `gfst_` token held in server-side secret custody.
 They use the same forms/version/publication operations as the human UI. There
 is no agent superuser or alternate schema format. Follow the
 [integration operations workflow](integrations-workflow.md) to issue and rotate
-tokens, configure signed webhooks, and reconcile uncertain mutations.
+tokens, configure signed webhooks, and reconcile uncertain mutations. The full
+self-service release remains governed by [#123](https://github.com/goformx/goformx/issues/123).
 
 ## Recover without losing edits
 

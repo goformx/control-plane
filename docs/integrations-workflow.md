@@ -8,7 +8,9 @@ For receiver code and the signed-delivery contract, use the tested
 and its linked TypeScript example.
 
 Production signup, account recovery, and deployment remain separate release
-gates. This guide does not claim they are released.
+gates. Publishing this guide does not by itself complete the self-service release
+tracked in [#123](https://github.com/goformx/goformx/issues/123) or all documentation
+acceptance in [#124](https://github.com/goformx/goformx/issues/124).
 
 ## Keep the three credentials separate
 
@@ -35,8 +37,9 @@ tokens and webhook signing secrets.
 4. At **Save this token now**, move the `gfst_` value directly into the
    integration's secret manager. This is the only reveal. The dashboard clears
    it after two minutes, on dismissal, when the tab is hidden, or when the form
-   changes. Clipboard managers and downloaded files may retain extra copies;
-   remove copies that are no longer needed.
+   changes. Starting any subsequent integration action also clears it. Clipboard
+   managers and downloaded files may retain extra copies; remove copies that are
+   no longer needed.
 5. Verify the integration using the canonical API/client guide. Token metadata
    shows an identifier, scopes, status, expiry, and last observed use; it can
    never recover the token value. The list is limited to 100 recent records and
@@ -62,17 +65,17 @@ to unlock further mutations.
    tolerance, and deduplicate the delivery ID. Install a 32–256 character
    signing secret in receiver-side secret custody.
 3. Enter the public HTTPS destination, the complete write-only custom-header
-   object, and the same signing secret. Confirm that the receiver is ready, then
-   choose **Save complete webhook configuration**. Replacement is complete:
-   omitted headers are removed. Destination paths, headers, and signing secrets
-   cannot be read back.
+   object, and the same signing secret. Choose whether to **Enable future deliveries when saving configuration**,
+   confirm that the receiver is ready, then choose **Save complete webhook configuration**.
+   Replacement is complete: omitted headers are removed.
+   Destination paths, headers, and signing secrets cannot be read back.
 4. Choose **Load delivery history** for the bounded recent window. A 2xx response
    acknowledges delivery but does not prove that the receiver verified the
    signature. Missing history does not prove that delivery never occurred.
 
 **Pause future deliveries** stops future enqueueing only. Accepted deliveries
 keep their original destination, headers, and signing secret and can still run.
-Resuming does not backfill submissions accepted while paused.
+**Resume future deliveries** does not backfill submissions accepted while paused.
 
 For rotation, configure the receiver to accept both the current and replacement
 keys, enter the replacement secret, confirm receiver readiness, and choose
@@ -93,21 +96,25 @@ assuming every error means the same thing:
 
 - `401` from the browser session requires signing in again. A failed internal
   data-plane assertion is reported separately and commits no change.
-- `403` means the current workspace role or downstream authorization denied the
-  operation. Refresh membership/context before trying a different action.
+- `403` means the current workspace role, the request's CSRF validation, or
+  downstream authorization denied the operation. Refresh membership/context;
+  if the session is otherwise valid, reload the page to obtain current CSRF
+  state before trying a different action.
 - `409` and `412` are definite concurrency rejections. Reload current metadata,
   compare it with the intended change, then submit a reconciled update.
-- `503` with an unavailable management audit, disabled webhook service, or
-  unavailable token service is a definite no-op. Fix service availability before
-  retrying.
+- `503` is a definite no-op only when the dashboard identifies one of its exact
+  recognized conditions: unavailable management audit, disabled webhook service,
+  or unavailable token service. Fix that service availability before retrying.
+  Treat any other `503` as uncertain.
 - A transport interruption, malformed response, timeout, or unclassified server
   failure may have happened after the mutation committed. The dashboard blocks
   further mutations but leaves token revocation and metadata reload available.
   Reload both token and webhook metadata, revoke unclaimed credentials, compare
   durable state with the intended change, then explicitly acknowledge
   reconciliation.
-- `429` is rate limiting. Honor `Retry-After`; do not turn it into a rapid retry
-  loop.
+- `429` is rate limiting. In the dashboard, wait before reloading. External API
+  clients must honor `Retry-After` as described by the API/client guide; neither
+  path should become a rapid retry loop.
 
 Never expect token values, webhook headers, destination paths, or signing
 secrets to be returned by a later read. Keep the receiver configuration and

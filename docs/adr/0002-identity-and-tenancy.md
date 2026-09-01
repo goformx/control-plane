@@ -111,17 +111,19 @@ token values, destination paths, custom headers or signing secrets. The control
 plane's assertion and signing custody never cross into the browser.
 
 The UI requires acknowledging the one-time copy/download warning before creation,
-and removes the reveal on dismissal, page hiding/navigation, form change and a
-two-minute timeout. It uses neither browser storage nor telemetry. Copy/download
-are explicit actions; clipboard managers and downloaded files are outside the
-application's deletion control. An interrupted creation is an uncertain outcome,
-not permission to automatically issue another token. Reload metadata, revoke any
-unclaimed credential, and explicitly reconcile before creating again.
+and removes the reveal on dismissal, page hiding/navigation, form change, any
+subsequent integration action and a two-minute timeout. It uses neither browser
+storage nor telemetry. Copy/download are explicit actions; clipboard managers and
+downloaded files are outside the application's deletion control. An interrupted
+creation is an uncertain outcome, not permission to automatically issue another
+token. Reload metadata, revoke any unclaimed credential, and explicitly reconcile
+before creating again.
 
 Webhook PATCH is ordinary JSON, unlike form metadata merge-patch; media types are
 operation-selected. Pause prevents future enqueueing only. Existing delivery
 snapshots keep their destination, headers and signing secret after endpoint
 rotation/deletion. Receivers must maintain old/new key overlap for outstanding
 deliveries and retained dead-letter replay. No operation claims an HTTP 2xx proves
-that the receiver verified its signature. Signed receiver examples and live
-verification remain #123/#124 release work.
+that the receiver verified its signature. The canonical repository now publishes
+a tested signed receiver example. The exact installed release and remaining
+self-service verification remain #123/#124 release work.

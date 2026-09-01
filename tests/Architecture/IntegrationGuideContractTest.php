@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace App\Tests\Architecture;
+
 use PHPUnit\Framework\TestCase;
 
 final class IntegrationGuideContractTest extends TestCase
@@ -11,6 +13,7 @@ final class IntegrationGuideContractTest extends TestCase
         $root = dirname(__DIR__, 2);
         $guide = (string) file_get_contents($root . '/docs/integrations-workflow.md');
         $template = (string) file_get_contents($root . '/templates/app.html.twig');
+        $integrationUi = (string) file_get_contents($root . '/ui/integrations-app.js');
 
         foreach ([
             'Manage API access',
@@ -19,6 +22,7 @@ final class IntegrationGuideContractTest extends TestCase
             'Reload token metadata',
             'I have reconciled the change',
             'Load webhook',
+            'Enable future deliveries when saving configuration',
             'Save complete webhook configuration',
             'Load delivery history',
             'Pause future deliveries',
@@ -28,6 +32,8 @@ final class IntegrationGuideContractTest extends TestCase
             self::assertStringContainsString($label, $guide, "Guide is missing rendered control: {$label}");
             self::assertStringContainsString($label, $template, "Rendered control is missing: {$label}");
         }
+        self::assertStringContainsString('Resume future deliveries', $guide);
+        self::assertStringContainsString('Resume future deliveries', $integrationUi);
 
         self::assertStringContainsString(
             'https://github.com/goformx/goformx/blob/main/docs/api-clients.md',
@@ -37,7 +43,13 @@ final class IntegrationGuideContractTest extends TestCase
             'https://github.com/goformx/goformx/blob/main/docs/webhooks.md',
             $guide,
         );
-        self::assertStringContainsString('[integration operations workflow](docs/integrations-workflow.md)', (string) file_get_contents($root . '/README.md'));
-        self::assertStringContainsString('[integration operations workflow](integrations-workflow.md)', (string) file_get_contents($root . '/docs/forms-workflow.md'));
+        self::assertStringContainsString(
+            '[integration operations workflow](docs/integrations-workflow.md)',
+            (string) file_get_contents($root . '/README.md'),
+        );
+        self::assertStringContainsString(
+            '[integration operations workflow](integrations-workflow.md)',
+            (string) file_get_contents($root . '/docs/forms-workflow.md'),
+        );
     }
 }
