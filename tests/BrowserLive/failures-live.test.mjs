@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 test('committed mutations with lost responses require explicit reconciliation', { timeout: 90000 }, async t => {
@@ -56,7 +57,12 @@ test('committed mutations with lost responses require explicit reconciliation', 
   await page.getByLabel('Password', { exact: true }).fill(users[0].password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(uiUrl + '/app');
-  await page.getByText('owner · Server-authorized workspace').waitFor();
+  try { await page.getByText('owner · Server-authorized workspace').waitFor(); }
+  catch (error) {
+    const detail = await page.locator('#error-message').textContent();
+    if (!detail) throw error;
+    throw new Error(`Workspace initialization failed: ${detail}; credentials and raw responses withheld.`);
+  }
 
   const formName = `failure-${randomUUID()}`;
   await page.getByRole('button', { name: '+ New form', exact: true }).click();
@@ -80,7 +86,8 @@ test('committed mutations with lost responses require explicit reconciliation', 
   await page.locator('#integration-uncertain').waitFor();
   await page.getByText('The outcome may be uncertain.', { exact: false }).waitFor();
   assert.equal(await page.locator('#issued-token').inputValue(), '');
-  assert.equal(await page.locator('#token-fields').isDisabled(), true);
+  await page.waitForFunction(() => document.querySelector('#token-fields')?.disabled === true);
+  assert.equal(await page.locator('#token-fields').evaluate(fieldset => fieldset.disabled), true);
   assert.deepEqual((await proxyState()).lastDrop, { method: 'POST', path: '/v1/service-tokens', upstreamStatus: 201 });
 
   await page.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
@@ -110,6 +117,11 @@ test('committed mutations with lost responses require explicit reconciliation', 
   const committedWebhook = evidence({ organizationId: owned.organizationId, formId: owned.id, tokenName, webhookSecrets: [webhookSecret] });
   assert.deepEqual([committedWebhook.activeTokenCount, committedWebhook.revokedTokenCount, committedWebhook.webhookEndpointCount], [0, 1, 1]);
   assert.equal(committedWebhook.plaintextWebhookConfigMatches, 0);
+  assert.ok(committedWebhook.webhookConfigRowsScanned >= 1, 'Plaintext evidence must inspect the live endpoint configuration row.');
+  await page.waitForFunction(() => document.querySelector('#webhook-fields')?.disabled === true
+    && document.querySelector('#delete-webhook')?.disabled === true);
+  assert.equal(await page.locator('#webhook-fields').evaluate(fieldset => fieldset.disabled), true);
+  assert.equal(await page.locator('#delete-webhook').isDisabled(), true);
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: 'I have reconciled the change', exact: true }).click();
   page.once('dialog', dialog => dialog.accept());
@@ -120,7 +132,9 @@ test('committed mutations with lost responses require explicit reconciliation', 
   assert.deepEqual(finalEvidence.events.map(event => event.event), [
     'service_token.created', 'service_token.revoked', 'webhook.created', 'webhook.deleted',
   ]);
-  assert.equal(finalEvidence.plaintextWebhookConfigMatches, 0);
+  const logs = [process.env.GOFORMX_CROSS_SERVICE_LOG, process.env.GOFORMX_CROSS_SERVICE_UI_LOG, process.env.GOFORMX_FAULT_PROXY_LOG]
+    .map(path => readFileSync(path, 'utf8')).join('\n');
+  assert.equal(logs.includes(webhookSecret), false, 'Failure-rehearsal logs must not retain the webhook signing secret.');
   assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
   assert.deepEqual(leaked, []); assert.deepEqual(errors, []);
 });

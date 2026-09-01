@@ -41,10 +41,10 @@ const proxy = createServer(async (request, response) => {
       return;
     }
     const responseHeaders = {};
-    for (const name of ['content-type', 'cache-control', 'pragma', 'x-trace-id', 'retry-after']) {
+    for (const name of ['content-type', 'cache-control', 'pragma', 'location', 'x-trace-id', 'retry-after']) {
       const value = upstream.headers.get(name); if (value !== null) responseHeaders[name] = value;
     }
-    responseHeaders['content-length'] = String(upstreamBody.length);
+    if (!['HEAD'].includes(request.method) && ![204, 304].includes(upstream.status)) responseHeaders['content-length'] = String(upstreamBody.length);
     response.writeHead(upstream.status, responseHeaders); response.end(upstreamBody);
   } catch { response.destroy(); }
 });
@@ -70,4 +70,3 @@ const control = createServer(async (request, response) => {
 
 proxy.listen(18093, '127.0.0.1');
 control.listen(18094, '127.0.0.1');
-

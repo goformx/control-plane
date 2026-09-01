@@ -195,12 +195,12 @@ jobs:
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
           WEBHOOK_ENABLED: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && 'true' || 'false' }}
           WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && 'ci' || '' }}
-          WEBHOOK_POLL_INTERVAL: ${{ matrix.suite == 'integrations' && '250ms' || '' }}
-          WEBHOOK_REQUEST_TIMEOUT: ${{ matrix.suite == 'integrations' && '3s' || '' }}
-          WEBHOOK_LOCK_TIMEOUT: ${{ matrix.suite == 'integrations' && '5s' || '' }}
-          WEBHOOK_MAX_ATTEMPTS: ${{ matrix.suite == 'integrations' && '2' || '' }}
-          WEBHOOK_BACKOFF_BASE: ${{ matrix.suite == 'integrations' && '1s' || '' }}
-          WEBHOOK_BACKOFF_MAX: ${{ matrix.suite == 'integrations' && '1s' || '' }}
+          WEBHOOK_POLL_INTERVAL: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '250ms' || '' }}
+          WEBHOOK_REQUEST_TIMEOUT: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '3s' || '' }}
+          WEBHOOK_LOCK_TIMEOUT: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '5s' || '' }}
+          WEBHOOK_MAX_ATTEMPTS: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '2' || '' }}
+          WEBHOOK_BACKOFF_BASE: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '1s' || '' }}
+          WEBHOOK_BACKOFF_MAX: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '1s' || '' }}
           GOFORMX_BOUNDARY_SUITE: ${{ matrix.suite }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
@@ -231,7 +231,8 @@ jobs:
           node tests/BrowserLive/fixtures/management-fault-proxy.mjs > "$GOFORMX_FAULT_PROXY_LOG" 2>&1 &
           echo "GOFORMX_FAULT_PROXY_PID=$!" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
-            if curl --fail --silent "$GOFORMX_FAULT_PROXY_CONTROL_URL/health" > /dev/null; then
+            if curl --fail --silent "$GOFORMX_FAULT_PROXY_CONTROL_URL/health" > /dev/null \
+              && curl --fail --silent http://127.0.0.1:18093/ready > /dev/null; then
               exit 0
             fi
             sleep 1

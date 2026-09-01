@@ -48,9 +48,11 @@ being added in bounded, reviewable slices.
   to Go, waits for their committed response, then drops that response before PHP
   receives it. The dashboard locks blind retries, reloads durable metadata,
   revokes the unclaimed token, and requires explicit reconciliation before the
-  next mutation. Read-only PostgreSQL checks and service-log scans also prove
-  token plaintext and webhook signing secrets are not retained in durable
-  credential fields or credential-adjacent logs.
+  next mutation. Its read-only PostgreSQL checks and log scans prove the webhook
+  signing secret is absent from live encrypted configuration and the services'
+  credential-adjacent logs. The full integration lifecycle separately proves
+  issued token plaintext and both webhook secrets are absent from durable
+  credential fields and service logs.
 
 ## Local verification
 

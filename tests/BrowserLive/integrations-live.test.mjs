@@ -254,6 +254,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
     tokenPlaintext: externalToken, webhookSecrets: [previousSecret, currentSecret] });
   assert.deepEqual([durable.activeTokenCount, durable.revokedTokenCount, durable.webhookEndpointCount], [0, 1, 0]);
   assert.deepEqual([durable.plaintextTokenMatches, durable.plaintextWebhookConfigMatches], [0, 0]);
+  assert.ok(durable.webhookConfigRowsScanned >= 1, 'Plaintext evidence must inspect retained delivery configuration rows.');
   assert.deepEqual(new Set(durable.deliveries.map(delivery => delivery.endpointId)).size, 1);
   assert.ok(durable.deliveries.every(delivery => delivery.origin === 'https://receiver.goformx.test' && delivery.hasEncryptedConfig));
   assert.deepEqual(Object.fromEntries(durable.deliveries.map(delivery => [delivery.id, [delivery.status, delivery.attemptCount, delivery.lastHttpStatus]])), {

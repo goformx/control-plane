@@ -52,7 +52,7 @@ try {
     );
     $database->exec("SET default_transaction_read_only = on");
 
-    $stage = 'token-counts';
+    $stage = 'named-token-counts';
     $token = $database->prepare(<<<'SQL'
         SELECT count(*) FILTER (WHERE revoked_at IS NULL) AS active_count,
                count(*) FILTER (WHERE revoked_at IS NOT NULL) AS revoked_count
@@ -71,11 +71,20 @@ try {
 
     $plaintextTokenMatches = 0;
     if ($tokenPlaintext !== '') {
+        $stage = 'token-plaintext';
         $plaintextToken = $database->prepare(<<<'SQL'
             SELECT count(*) FROM service_tokens
-            WHERE organization_id = :organization AND encode(token_hash, 'escape') = :plaintext
+            WHERE organization_id = :organization
+              AND (position(convert_to(:plaintext_bytes, 'UTF8') in token_hash) > 0
+                OR position(:plaintext_token_id in token_id) > 0
+                OR position(:plaintext_name in name) > 0
+                OR position(:plaintext_scopes in scopes::text) > 0)
             SQL);
-        $plaintextToken->execute(['organization' => $organizationId, 'plaintext' => $tokenPlaintext]);
+        $plaintextToken->execute([
+            'organization' => $organizationId, 'plaintext_bytes' => $tokenPlaintext,
+            'plaintext_token_id' => $tokenPlaintext, 'plaintext_name' => $tokenPlaintext,
+            'plaintext_scopes' => $tokenPlaintext,
+        ]);
         $plaintextTokenMatches = $plaintextToken->fetchColumn();
     }
 
@@ -87,6 +96,19 @@ try {
         throw new RuntimeException('Evidence count unavailable.');
     }
 
+    $stage = 'webhook-plaintext';
+    $webhookConfigRows = $database->prepare(<<<'SQL'
+        SELECT count(*) FROM (
+            SELECT encrypted_config FROM webhook_endpoints WHERE form_id = :endpoint_form
+            UNION ALL
+            SELECT encrypted_config FROM webhook_deliveries WHERE form_id = :delivery_form
+        ) AS configs
+        SQL);
+    $webhookConfigRows->execute(['endpoint_form' => $formId, 'delivery_form' => $formId]);
+    $webhookConfigRowsScanned = $webhookConfigRows->fetchColumn();
+    if ($webhookConfigRowsScanned === false) {
+        throw new RuntimeException('Evidence count unavailable.');
+    }
     $plaintextWebhookConfigMatches = 0;
     $plaintextWebhook = $database->prepare(<<<'SQL'
         SELECT count(*) FROM (
@@ -149,6 +171,7 @@ try {
         'organizationRevokedTokenCount' => (int) $organizationTokenCounts['revoked_count'],
         'plaintextTokenMatches' => (int) $plaintextTokenMatches,
         'plaintextWebhookConfigMatches' => $plaintextWebhookConfigMatches,
+        'webhookConfigRowsScanned' => (int) $webhookConfigRowsScanned,
         'webhookEndpointCount' => (int) $endpointCount,
         'deliveries' => $deliveries,
         'events' => $events,
