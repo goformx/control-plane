@@ -66,10 +66,10 @@ a PostgreSQL-backed webhook and independently checks the resulting management
 audit identifiers and terminal rows. This guards the end-to-end
 numeric boundary from GoFormX #144 and the initial integration lifecycle from
 #168; browser-only fixture tests cannot detect a broken data plane.
-The HTTP/custody and browser rehearsals use separate disposable environments,
-so their loopback traffic does not share the framework's persistent per-IP
-rate-limit budget. Both must pass the `authenticated-boundary` gate; production
-rate limits remain enabled and unchanged.
+The HTTP/custody, forms-browser, and integrations-browser rehearsals use separate
+disposable environments, so their loopback traffic does not share the framework's
+persistent per-IP rate-limit budget. Every matrix leg must pass the
+`authenticated-boundary` gate; production rate limits remain enabled and unchanged.
 Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,
 or raw credential-adjacent logs are published as test artifacts.

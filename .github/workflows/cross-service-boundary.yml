@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [http, browser]
+        suite: [http, browser, integrations]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -84,15 +84,15 @@ jobs:
           php vendor/bin/waaseyaa install:init
 
       - name: Set up the pinned browser test runtime
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
       - run: npx --no-install playwright install --with-deps chromium
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
 
       - name: Generate ephemeral assertion custody
         run: |
@@ -172,6 +172,12 @@ jobs:
         env:
           GOFORMX_BROWSER_REHEARSAL: '1'
         run: npm run test:live
+
+      - name: Exercise the rendered integration lifecycle against both real services
+        if: matrix.suite == 'integrations'
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+        run: npm run test:live:integrations
 
       - name: Rehearse configured custody rotation and real process recovery
         if: matrix.suite == 'http'

@@ -6,7 +6,7 @@ import { chromium } from 'playwright';
 import { parseJSON, stringify } from '../../ui/schema-json.js';
 import { readSchemaEditor } from '../helpers/editor.mjs';
 
-test('real browser login → create → publish → integrations → submission, with foreign workspace denial', { timeout: 120000 }, async t => {
+test('real browser login → create → version → publish → public submission, with foreign workspace denial', { timeout: 90000 }, async t => {
   assert.equal(process.env.GOFORMX_BROWSER_REHEARSAL, '1');
   const url = process.env.GOFORMX_CROSS_SERVICE_UI_URL;
   assert.equal(url, 'http://127.0.0.1:18091');
@@ -20,17 +20,6 @@ test('real browser login → create → publish → integrations → submission,
         if (/^[a-z-]+$/.test(info.stage) && /^[A-Za-z0-9_\\]+$/.test(info.exception) && /^[A-Za-z0-9_.-]+$/.test(info.file) && Number.isInteger(info.line)) location = `${info.stage}: ${info.exception} in ${info.file}:${info.line}`;
       } catch { /* Never print unstructured subprocess output. */ }
       throw new Error(`Disposable browser fixture ${input.action} failed or timed out (${location}); credentials and logs withheld.`);
-    }
-  };
-  const dataPlaneEvidence = input => {
-    try { return JSON.parse(execFileSync('php', ['tests/BrowserLive/fixtures/data-plane-evidence.php'], { input: JSON.stringify(input), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 30000 })); }
-    catch (error) {
-      let location = 'unavailable';
-      try {
-        const info = JSON.parse(error.stderr);
-        if (/^[a-z-]+$/.test(info.stage) && /^[A-Za-z0-9_\\]+$/.test(info.exception) && /^[A-Za-z0-9_.-]+$/.test(info.file) && Number.isInteger(info.line)) location = `${info.stage}: ${info.exception} in ${info.file}:${info.line}`;
-      } catch { /* Never print unstructured subprocess output. */ }
-      throw new Error(`Disposable data-plane evidence query failed or timed out (${location}); credentials and rows withheld.`);
     }
   };
   const users = JSON.parse(fixture({ action: 'create' }));
@@ -120,8 +109,6 @@ test('real browser login → create → publish → integrations → submission,
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);
-  const organizationId = owned.organizationId;
-  assert.ok(/^[0-9a-f-]{36}$/i.test(organizationId), 'Owned form organization identifier is unavailable.');
   // Publishing a different policy must not reinterpret an already accepted row.
   const newer = parseJSON(stringify(revised));
   newer.properties.exactInteger.title = 'Newer integer label';
@@ -173,71 +160,4 @@ test('real browser login → create → publish → integrations → submission,
     return responses.map(response => ({ status: response.status, attachment: response.headers.get('Content-Disposition') }));
   }, { form: owned.id, submission: submission.first.data.id });
   assert.deepEqual(deniedSubmissions, Array.from({ length: 3 }, () => ({ status: 404, attachment: null })));
-
-  // Run the integration lifecycle last so it cannot mask the pre-existing form
-  // and tenancy assertions if a management operation regresses shared UI state.
-  const integrationName = `browser-token-${randomUUID()}`;
-  await owner.getByRole('button', { name: 'Manage API access' }).click();
-  await owner.getByText('No token metadata returned.', { exact: true }).waitFor();
-  await owner.locator('#token-name').fill(integrationName);
-  await owner.getByLabel('forms:read', { exact: true }).check();
-  await owner.locator('#token-warning').check();
-  await owner.getByRole('button', { name: 'Create scoped token' }).click();
-  await owner.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor();
-  const externalToken = await owner.locator('#issued-token').inputValue();
-  assert.ok(/^gfst_[A-Za-z0-9_-]{43}$/.test(externalToken), 'Issued token shape mismatched; value withheld.');
-  const externalBeforeRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
-    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
-  });
-  assert.equal(externalBeforeRevoke.status, 200);
-  assert.ok((await externalBeforeRevoke.text()).includes(owned.id), 'Scoped token did not return the owned form; body withheld.');
-  await owner.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
-  await owner.getByText(`${integrationName} · active`, { exact: true }).waitFor();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: `Revoke ${integrationName}`, exact: true }).click();
-  await owner.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
-  const externalAfterRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
-    headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
-  });
-  assert.equal(externalAfterRevoke.status, 401);
-  await externalAfterRevoke.text();
-
-  await owner.getByRole('button', { name: 'Load webhook', exact: true }).click();
-  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
-  // The real data plane resolves destinations as an SSRF defense. Use a public
-  // documentation origin; no submission follows this configuration lifecycle.
-  await owner.locator('#webhook-url').fill('https://example.com/hooks/goformx');
-  await owner.locator('#webhook-headers').fill('{"X-Receiver-Fixture":"browser-live"}');
-  await owner.locator('#webhook-secret').fill('browser-live-original-signing-key-123456');
-  await owner.locator('#receiver-ready').check();
-  await owner.getByRole('button', { name: 'Save complete webhook configuration', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
-  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
-  assert.equal(await owner.locator('#webhook-headers').inputValue(), '');
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Pause future deliveries', exact: true }).click();
-  await owner.getByText('Paused for future submissions · https://example.com', { exact: false }).waitFor();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Resume future deliveries', exact: true }).click();
-  await owner.getByText('Enabled for future submissions · https://example.com', { exact: false }).waitFor();
-  await owner.locator('#webhook-secret').fill('browser-live-rotated-signing-key-123456');
-  await owner.locator('#receiver-ready').check();
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Rotate signing secret only', exact: true }).click();
-  await owner.getByText('Signing secret rotated for future deliveries.', { exact: false }).waitFor();
-  assert.equal(await owner.locator('#webhook-secret').inputValue(), '');
-  owner.once('dialog', dialog => dialog.accept());
-  await owner.getByRole('button', { name: 'Remove webhook endpoint', exact: true }).click();
-  await owner.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
-  await owner.getByText('Endpoint removed. Accepted deliveries are retained.', { exact: true }).waitFor();
-  const durable = dataPlaneEvidence({ organizationId, formId: owned.id, tokenName: integrationName });
-  assert.equal(durable.activeTokenCount, 0);
-  assert.equal(durable.revokedTokenCount, 1);
-  assert.equal(durable.webhookEndpointCount, 0);
-  assert.deepEqual(durable.events.map(event => event.event), [
-    'service_token.created', 'service_token.revoked', 'webhook.created', 'webhook.paused',
-    'webhook.resumed', 'webhook.signing_secret_rotated', 'webhook.deleted',
-  ]);
-  assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
-  assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
 });
