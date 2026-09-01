@@ -60,6 +60,29 @@ try {
         throw new RuntimeException('Evidence count unavailable.');
     }
 
+    $stage = 'delivery-snapshots';
+    $deliveryQuery = $database->prepare(<<<'SQL'
+        SELECT uuid, submission_id, endpoint_id, destination_origin, status, attempt_count,
+               last_http_status, octet_length(encrypted_config) > 0 AS has_encrypted_config
+        FROM webhook_deliveries
+        WHERE form_id = :form
+        ORDER BY created_at, uuid
+        SQL);
+    $deliveryQuery->execute(['form' => $formId]);
+    $deliveries = array_map(
+        static fn(array $row): array => [
+            'id' => $row['uuid'],
+            'submissionId' => $row['submission_id'],
+            'endpointId' => $row['endpoint_id'],
+            'origin' => $row['destination_origin'],
+            'status' => $row['status'],
+            'attemptCount' => (int) $row['attempt_count'],
+            'lastHttpStatus' => $row['last_http_status'] === null ? null : (int) $row['last_http_status'],
+            'hasEncryptedConfig' => filter_var($row['has_encrypted_config'], FILTER_VALIDATE_BOOL),
+        ],
+        $deliveryQuery->fetchAll(),
+    );
+
     $stage = 'audits';
     $audits = $database->prepare(<<<'SQL'
         SELECT audit_id, event
@@ -78,6 +101,7 @@ try {
         'activeTokenCount' => (int) $tokenCounts['active_count'],
         'revokedTokenCount' => (int) $tokenCounts['revoked_count'],
         'webhookEndpointCount' => (int) $endpointCount,
+        'deliveries' => $deliveries,
         'events' => $events,
     ], JSON_THROW_ON_ERROR));
 } catch (Throwable $error) {
