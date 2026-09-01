@@ -38,8 +38,9 @@ For direct automation, use the released [API/client guide](https://github.com/go
 and its pinned contract artifacts. External agents and custom-dashboard servers
 use an organization-scoped `gfst_` token held in server-side secret custody.
 They use the same forms/version/publication operations as the human UI. There
-is no agent superuser or alternate schema format. Token self-service has its
-own [#123](https://github.com/goformx/goformx/issues/123) delivery gate.
+is no agent superuser or alternate schema format. Follow the
+[integration operations workflow](integrations-workflow.md) to issue and rotate
+tokens, configure signed webhooks, and reconcile uncertain mutations.
 
 ## Recover without losing edits
 
