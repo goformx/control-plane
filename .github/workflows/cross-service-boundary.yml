@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [http, browser, integrations, authorization]
+        suite: [http, browser, integrations, authorization, failures]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -39,13 +39,14 @@ jobs:
       WAASEYAA_APP_SECRET: base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
       WAASEYAA_JWT_SECRET: cross-service-only-not-production
       WAASEYAA_DEV_FALLBACK_ACCOUNT: 'false'
-      GOFORMX_API_URL: http://127.0.0.1:18090
+      GOFORMX_API_URL: ${{ matrix.suite == 'failures' && 'http://127.0.0.1:18093' || 'http://127.0.0.1:18090' }}
       GOFORMX_ASSERTION_ISSUER: https://goformx.com
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
       GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
       GOFORMX_WEBHOOK_RECEIVER_URL: https://receiver.goformx.test/hooks/goformx
       GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL: http://127.0.0.1:18092
+      GOFORMX_FAULT_PROXY_CONTROL_URL: http://127.0.0.1:18094
       GOFORMX_WEBHOOK_CURRENT_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-current-signing-key-123456' || '' }}
       GOFORMX_WEBHOOK_PREVIOUS_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-previous-signing-key-123456' || '' }}
     steps:
@@ -62,6 +63,7 @@ jobs:
           echo "GOFORMX_WEBHOOK_RECEIVER_CERT=$RUNNER_TEMP/webhook-receiver.pem" >> "$GITHUB_ENV"
           echo "GOFORMX_WEBHOOK_RECEIVER_KEY=$RUNNER_TEMP/webhook-receiver-key.pem" >> "$GITHUB_ENV"
           echo "GOFORMX_WEBHOOK_RECEIVER_PID_FILE=$RUNNER_TEMP/webhook-receiver.pid" >> "$GITHUB_ENV"
+          echo "GOFORMX_FAULT_PROXY_LOG=$RUNNER_TEMP/management-fault-proxy.log" >> "$GITHUB_ENV"
 
       - name: Checkout the accepted Go data-plane boundary
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -159,7 +161,7 @@ jobs:
           done <<< "$custody"
 
       - name: Generate ephemeral webhook custody
-        if: matrix.suite == 'integrations'
+        if: matrix.suite == 'integrations' || matrix.suite == 'failures'
         run: |
           webhook_key="$(openssl rand -base64 32 | tr -d '\n')"
           echo "::add-mask::$webhook_key"
@@ -191,19 +193,21 @@ jobs:
           FIRST_PARTY_ASSERTION_ENABLED: 'true'
           FIRST_PARTY_ASSERTION_ISSUER: https://goformx.com
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
-          WEBHOOK_ENABLED: ${{ matrix.suite == 'integrations' && 'true' || 'false' }}
-          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ matrix.suite == 'integrations' && 'ci' || '' }}
-          WEBHOOK_POLL_INTERVAL: ${{ matrix.suite == 'integrations' && '250ms' || '' }}
-          WEBHOOK_REQUEST_TIMEOUT: ${{ matrix.suite == 'integrations' && '3s' || '' }}
-          WEBHOOK_LOCK_TIMEOUT: ${{ matrix.suite == 'integrations' && '5s' || '' }}
-          WEBHOOK_MAX_ATTEMPTS: ${{ matrix.suite == 'integrations' && '2' || '' }}
-          WEBHOOK_BACKOFF_BASE: ${{ matrix.suite == 'integrations' && '1s' || '' }}
-          WEBHOOK_BACKOFF_MAX: ${{ matrix.suite == 'integrations' && '1s' || '' }}
+          WEBHOOK_ENABLED: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && 'true' || 'false' }}
+          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && 'ci' || '' }}
+          WEBHOOK_POLL_INTERVAL: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '250ms' || '' }}
+          WEBHOOK_REQUEST_TIMEOUT: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '3s' || '' }}
+          WEBHOOK_LOCK_TIMEOUT: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '5s' || '' }}
+          WEBHOOK_MAX_ATTEMPTS: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '2' || '' }}
+          WEBHOOK_BACKOFF_BASE: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '1s' || '' }}
+          WEBHOOK_BACKOFF_MAX: ${{ (matrix.suite == 'integrations' || matrix.suite == 'failures') && '1s' || '' }}
           GOFORMX_BOUNDARY_SUITE: ${{ matrix.suite }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
-          if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" ]]; then
+          if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" || "$GOFORMX_BOUNDARY_SUITE" == "failures" ]]; then
             export WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING"
+          fi
+          if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" ]]; then
             export SSL_CERT_FILE="$GOFORMX_WEBHOOK_RECEIVER_CA"
           fi
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
@@ -216,6 +220,24 @@ jobs:
             sleep 1
           done
           echo "GoFormX API did not become ready. Raw credential-adjacent logs are not published."
+          exit 1
+
+      - name: Start the response-loss fault proxy
+        if: matrix.suite == 'failures'
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+          GOFORMX_FAULT_PROXY_UPSTREAM: http://127.0.0.1:18090
+        run: |
+          node tests/BrowserLive/fixtures/management-fault-proxy.mjs > "$GOFORMX_FAULT_PROXY_LOG" 2>&1 &
+          echo "GOFORMX_FAULT_PROXY_PID=$!" >> "$GITHUB_ENV"
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$GOFORMX_FAULT_PROXY_CONTROL_URL/health" > /dev/null \
+              && curl --fail --silent http://127.0.0.1:18093/ready > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Management fault proxy did not become ready. Proxy logs are not published."
           exit 1
 
       - name: Start the real Waaseyaa HTTP entry point
@@ -259,6 +281,15 @@ jobs:
           GOFORMX_EVIDENCE_PASSWORD: cross-service-only
         run: npm run test:live:authorization
 
+      - name: Exercise committed mutations with lost responses
+        if: matrix.suite == 'failures'
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+          GOFORMX_EVIDENCE_DSN: pgsql:host=127.0.0.1;port=5432;dbname=goformx
+          GOFORMX_EVIDENCE_USER: goformx
+          GOFORMX_EVIDENCE_PASSWORD: cross-service-only
+        run: npm run test:live:failures
+
       - name: Rehearse configured custody rotation and real process recovery
         if: matrix.suite == 'http'
         env:
@@ -276,6 +307,9 @@ jobs:
           fi
           if [[ -n "${GOFORMX_UI_PID:-}" ]]; then
             kill "$GOFORMX_UI_PID" 2>/dev/null || true
+          fi
+          if [[ -n "${GOFORMX_FAULT_PROXY_PID:-}" ]]; then
+            kill "$GOFORMX_FAULT_PROXY_PID" 2>/dev/null || true
           fi
           if [[ -f "${GOFORMX_WEBHOOK_RECEIVER_PID_FILE:-}" ]]; then
             receiver_pid="$(cat "$GOFORMX_WEBHOOK_RECEIVER_PID_FILE")"

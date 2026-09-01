@@ -8,7 +8,8 @@
     "test:browser": "node --test tests/Browser/*.test.mjs",
     "test:live": "node --test tests/BrowserLive/forms-*.test.mjs",
     "test:live:integrations": "node --test tests/BrowserLive/integrations-*.test.mjs",
-    "test:live:authorization": "node --test tests/BrowserLive/authorization-*.test.mjs"
+    "test:live:authorization": "node --test tests/BrowserLive/authorization-*.test.mjs",
+    "test:live:failures": "node --test tests/BrowserLive/failures-*.test.mjs"
   },
   "dependencies": {
     "@codemirror/lang-json": "6.0.2",
