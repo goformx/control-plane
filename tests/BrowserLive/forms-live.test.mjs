@@ -184,12 +184,12 @@ test('real browser login → create → publish → integrations → submission,
   await owner.getByRole('button', { name: 'Create scoped token' }).click();
   await owner.getByRole('heading', { name: 'Save this token now', exact: true }).waitFor();
   const externalToken = await owner.locator('#issued-token').inputValue();
-  assert.match(externalToken, /^gfst_[A-Za-z0-9_-]{43}$/);
+  assert.ok(/^gfst_[A-Za-z0-9_-]{43}$/.test(externalToken), 'Issued token shape mismatched; value withheld.');
   const externalBeforeRevoke = await fetch(`${process.env.GOFORMX_PUBLIC_API_URL}/v1/forms?limit=25&offset=0`, {
     headers: { Authorization: `Bearer ${externalToken}` }, signal: AbortSignal.timeout(15000),
   });
   assert.equal(externalBeforeRevoke.status, 200);
-  assert.match(await externalBeforeRevoke.text(), new RegExp(owned.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+  assert.ok((await externalBeforeRevoke.text()).includes(owned.id), 'Scoped token did not return the owned form; body withheld.');
   await owner.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
   await owner.getByText(`${integrationName} · active`, { exact: true }).waitFor();
   owner.once('dialog', dialog => dialog.accept());

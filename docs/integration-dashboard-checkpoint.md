@@ -32,7 +32,7 @@ bounded, reviewable slices.
   issues and revokes a scoped token, proves direct API access before revocation
   and rejection afterward, and runs webhook create/pause/resume/secret-rotation/
   delete against disposable PostgreSQL. A separate read-only database fixture
-  verifies terminal token/webhook state plus unique append-only audit IDs.
+  verifies terminal token/webhook state plus unique management audit IDs.
 
 ## Local verification
 

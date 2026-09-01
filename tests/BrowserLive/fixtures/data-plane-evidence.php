@@ -3,7 +3,12 @@
 declare(strict_types=1);
 
 // CLI-only, read-only evidence query for the disposable PostgreSQL rehearsal.
-if (PHP_SAPI !== 'cli' || getenv('GOFORMX_BROWSER_REHEARSAL') !== '1' || getenv('APP_ENV') !== 'local') {
+$dsn = getenv('GOFORMX_EVIDENCE_DSN');
+$databaseUser = getenv('GOFORMX_EVIDENCE_USER');
+$databasePassword = getenv('GOFORMX_EVIDENCE_PASSWORD');
+if (PHP_SAPI !== 'cli' || getenv('GOFORMX_BROWSER_REHEARSAL') !== '1' || getenv('APP_ENV') !== 'local'
+    || !is_string($dsn) || $dsn === '' || !is_string($databaseUser) || $databaseUser === ''
+    || !is_string($databasePassword) || $databasePassword === '') {
     exit(2);
 }
 
@@ -20,9 +25,9 @@ try {
 
     $stage = 'connect';
     $database = new PDO(
-        'pgsql:host=127.0.0.1;port=5432;dbname=goformx',
-        'goformx',
-        'cross-service-only',
+        $dsn,
+        $databaseUser,
+        $databasePassword,
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC],
     );
     $database->exec("SET default_transaction_read_only = on");
@@ -39,6 +44,10 @@ try {
     $stage = 'endpoint-count';
     $endpoint = $database->prepare('SELECT count(*) FROM webhook_endpoints WHERE form_id = :form');
     $endpoint->execute(['form' => $formId]);
+    $endpointCount = $endpoint->fetchColumn();
+    if ($endpointCount === false) {
+        throw new RuntimeException('Evidence count unavailable.');
+    }
 
     $stage = 'audits';
     $audits = $database->prepare(<<<'SQL'
@@ -57,7 +66,7 @@ try {
     fwrite(STDOUT, json_encode([
         'activeTokenCount' => (int) $tokenCounts['active_count'],
         'revokedTokenCount' => (int) $tokenCounts['revoked_count'],
-        'webhookEndpointCount' => (int) $endpoint->fetchColumn(),
+        'webhookEndpointCount' => (int) $endpointCount,
         'events' => $events,
     ], JSON_THROW_ON_ERROR));
 } catch (Throwable $error) {

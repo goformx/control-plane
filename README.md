@@ -62,8 +62,8 @@ rejects adjacent below-minimum public values, and retries a valid precise
 submission. It also issues a scoped external service token through the rendered
 dashboard, uses it directly against Go, revokes it, and proves authentication is
 then rejected. The same rehearsal creates, pauses, resumes, rotates, and deletes
-a PostgreSQL-backed webhook and independently checks the resulting append-only
-management audit identifiers and terminal rows. This guards the end-to-end
+a PostgreSQL-backed webhook and independently checks the resulting management
+audit identifiers and terminal rows. This guards the end-to-end
 numeric boundary from GoFormX #144 and the initial integration lifecycle from
 #168; browser-only fixture tests cannot detect a broken data plane.
 The HTTP/custody and browser rehearsals use separate disposable environments,
