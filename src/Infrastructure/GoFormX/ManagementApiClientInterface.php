@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Infrastructure\GoFormX;
 
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\RequestMediaType;
 use Waaseyaa\HttpClient\HttpResponse;
 
 interface ManagementApiClientInterface
@@ -22,5 +23,6 @@ interface ManagementApiClientInterface
         array|string|null $body = null,
         ?string $requestId = null,
         ?string $ifMatch = null,
+        RequestMediaType $mediaType = RequestMediaType::Json,
     ): HttpResponse;
 }

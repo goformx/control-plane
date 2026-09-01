@@ -110,6 +110,19 @@ test('mobile layout, focus, unsaved navigation and session expiry', async t => {
   assert.equal(await page.getByRole('button', { name: 'Validate & save new draft' }).isDisabled(), true);
 });
 
+test('forms data-plane assertion failure does not expire a valid PHP session', async t => {
+  const { page } = await fixture(t, { populated: true }); await openForm(page);
+  await page.route('**/api/control-plane/forms?*', route => route.fulfill({
+    status: 502, json: { errors: [{ status: '502', title: 'Bad Gateway', detail: 'Data-plane authentication unavailable.' }] },
+  }));
+  await page.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await page.getByText('Forms could not be loaded.', { exact: false }).waitFor();
+  await page.waitForFunction(() => !document.getElementById('refresh').disabled);
+  assert.equal(await page.locator('#new-form').isDisabled(), false);
+  assert.equal(await page.locator('#read-only').isVisible(), false);
+  assert.equal(await page.getByRole('link', { name: 'Sign in again' }).isVisible(), false);
+});
+
 test('loading and pagination use bounded server pages', async t => {
   const { page, data } = await fixture(t, { populated: true });
   data.forms = Array.from({ length: 26 }, (_, index) => ({ ...data.forms[0], id: String(index), title: `Form ${index}`, name: `form-${index}` }));

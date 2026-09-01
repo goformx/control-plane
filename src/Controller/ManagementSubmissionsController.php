@@ -71,6 +71,17 @@ final readonly class ManagementSubmissionsController
                 throw new \UnexpectedValueException('Oversized management response.');
             }
             $headers = array_change_key_case($downstream->headers, CASE_LOWER);
+            $deliveryError = $operation === SubmissionOperation::Deliveries && in_array($downstream->statusCode, [401, 403], true);
+            if ($downstream->statusCode === 401 || $deliveryError) {
+                $response = $deliveryError ? $this->privateResponse(new JsonResponse(['error' => [
+                    'code' => $downstream->statusCode === 401 ? 'data_plane_authentication_failed' : 'data_plane_access_denied',
+                    'message' => $downstream->statusCode === 401 ? 'Data-plane authentication is unavailable.' : 'The data plane denied this integration operation.',
+                ]], $downstream->statusCode === 401 ? 502 : 403)) :
+                    $this->error(502, 'The submissions API could not authenticate with the data plane. Try again later.');
+                $trace = $headers['x-trace-id'] ?? '';
+                if (Uuid::isValid($trace)) { $response->headers->set('X-Trace-Id', $trace); }
+                return $response;
+            }
             $response = new Response($downstream->body, $downstream->statusCode, ['Content-Type' => 'application/json']);
             if ($operation === SubmissionOperation::Export && $downstream->statusCode === 200) {
                 $exportId = $headers['x-goformx-export-id'] ?? '';

@@ -20,6 +20,7 @@ Generated files are owned by `.waaseyaa/generated.json`. Regeneration refuses ed
 - Never connect PHP to the GoFormX PostgreSQL database or persist copies of forms and submissions as another source of truth.
 - Resolve one authorized organization membership server-side before every management call. A browser-supplied organization identifier is input, never authority.
 - First-party Waaseyaa assertions and external `gfst_` service tokens are separate credential classes defined by goformx/goformx#126. Neither may be exposed in browser-delivered code or logs.
+  The #123 provisioning exception may reveal a newly issued external token once to its authorized owner/admin in a no-store response. It must never expose the credential used by the control plane, recover stored tokens, persist the reveal, or send it to telemetry. See ADR 0002.
 - The Waaseyaa UI, third-party agents, and custom dashboards use the same documented business contract. Do not create an agent superuser or a second MCP-only business API.
 
 ## Agent roles

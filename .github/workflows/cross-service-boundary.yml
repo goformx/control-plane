@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [http, browser]
+        suite: [http, browser, integrations]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -58,14 +58,14 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: goformx/goformx
-          ref: 4a360904e5b54644c99e62e344df65f2d06ce58c
+          ref: 9a73623d7aa194019a2d3c800e7c9d3f0b4eede1
           path: .ci/goformx
 
       - name: Set up PHP
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.5'
-          extensions: fileinfo, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
+          extensions: fileinfo, pdo_pgsql, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
           coverage: none
 
       - name: Set up Go
@@ -81,15 +81,15 @@ jobs:
           php vendor/bin/waaseyaa install:init
 
       - name: Set up the pinned browser test runtime
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
       - run: npx --no-install playwright install --with-deps chromium
-        if: matrix.suite == 'browser'
+        if: matrix.suite != 'http'
 
       - name: Generate ephemeral assertion custody
         run: |
@@ -100,6 +100,13 @@ jobs:
             fi
             printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
           done <<< "$custody"
+
+      - name: Generate ephemeral webhook custody
+        if: matrix.suite == 'integrations'
+        run: |
+          webhook_key="$(openssl rand -base64 32 | tr -d '\n')"
+          echo "::add-mask::$webhook_key"
+          printf 'GOFORMX_WEBHOOK_KEYRING={"ci":"%s"}\n' "$webhook_key" >> "$GITHUB_ENV"
 
       - name: Migrate the disposable GoFormX database
         working-directory: .ci/goformx/goforms
@@ -127,8 +134,14 @@ jobs:
           FIRST_PARTY_ASSERTION_ENABLED: 'true'
           FIRST_PARTY_ASSERTION_ISSUER: https://goformx.com
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
+          WEBHOOK_ENABLED: ${{ matrix.suite == 'integrations' && 'true' || 'false' }}
+          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ matrix.suite == 'integrations' && 'ci' || '' }}
+          GOFORMX_BOUNDARY_SUITE: ${{ matrix.suite }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
+          if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" ]]; then
+            export WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING"
+          fi
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
             "$RUNNER_TEMP/goformx-api" > "$GOFORMX_CROSS_SERVICE_LOG" 2>&1 &
           echo "GOFORMX_API_PID=$!" >> "$GITHUB_ENV"
@@ -163,6 +176,15 @@ jobs:
         env:
           GOFORMX_BROWSER_REHEARSAL: '1'
         run: npm run test:live
+
+      - name: Exercise the rendered integration lifecycle against both real services
+        if: matrix.suite == 'integrations'
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+          GOFORMX_EVIDENCE_DSN: pgsql:host=127.0.0.1;port=5432;dbname=goformx
+          GOFORMX_EVIDENCE_USER: goformx
+          GOFORMX_EVIDENCE_PASSWORD: cross-service-only
+        run: npm run test:live:integrations
 
       - name: Rehearse configured custody rotation and real process recovery
         if: matrix.suite == 'http'

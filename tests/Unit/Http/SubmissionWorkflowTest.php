@@ -98,6 +98,42 @@ final class SubmissionWorkflowTest extends TestCase
         self::assertSame(403, $controller->handle($this->request(SubmissionOperation::Get), SubmissionOperation::Get)->getStatusCode());
     }
 
+    public function testDeliveryAssertionFailureCannotMasqueradeAsAnExpiredBrowserSession(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createStub(ManagementApiClientInterface::class);
+        $client->method('request')->willReturn(new HttpResponse(401,
+            '{"error":{"code":"invalid_first_party_assertion","message":"private-canary"}}'));
+
+        $response = (new ManagementSubmissionsController($resolver, $client))->handle(
+            $this->request(SubmissionOperation::Deliveries), SubmissionOperation::Deliveries);
+        $payload = json_decode($response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertSame('data_plane_authentication_failed', $payload['error']['code']);
+        self::assertStringNotContainsString('private-canary', $response->getContent());
+        self::assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
+    public function testDeliveryDownstreamDenialIsNotBlamedOnPhpMembership(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createStub(ManagementApiClientInterface::class);
+        $client->method('request')->willReturn(new HttpResponse(403,
+            '{"error":{"code":"forbidden","message":"private-canary"}}'));
+
+        $response = (new ManagementSubmissionsController($resolver, $client))->handle(
+            $this->request(SubmissionOperation::Deliveries), SubmissionOperation::Deliveries);
+        $payload = json_decode($response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame(403, $response->getStatusCode());
+        self::assertSame('data_plane_access_denied', $payload['error']['code']);
+        self::assertStringContainsString('data plane denied', $payload['error']['message']);
+        self::assertStringNotContainsString('private-canary', $response->getContent());
+    }
+
     public function testQueryDuplicatesAndExactExportBodyReachTheCanonicalValidatorUnchanged(): void
     {
         $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
@@ -197,7 +233,7 @@ final class SubmissionWorkflowTest extends TestCase
             $client->method('request')->willReturn(new HttpResponse($status, '{"error":{"code":"denied"}}',
                 array_merge($this->download()->headers, ['retry-after' => '1'])));
             $response = (new ManagementSubmissionsController($resolver, $client))->handle($this->request(SubmissionOperation::Export), SubmissionOperation::Export);
-            self::assertSame($status, $response->getStatusCode());
+            self::assertSame($status === 401 ? 502 : $status, $response->getStatusCode());
             self::assertFalse($response->headers->has('Content-Disposition'));
             self::assertFalse($response->headers->has('X-GoFormX-Export-ID'));
             self::assertFalse($response->headers->has('Content-Length'));

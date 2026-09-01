@@ -59,12 +59,17 @@ The separate cross-service workflow additionally runs `npm run test:live`
 against real Waaseyaa sessions, Go HTTP handlers and disposable PostgreSQL.
 It saves and reloads exact integer/decimal schema constraints through the editor,
 rejects adjacent below-minimum public values, and retries a valid precise
-submission. This guards the end-to-end numeric boundary from GoFormX #144;
-browser-only codec tests cannot detect a rounding data plane.
-The HTTP/custody and browser rehearsals use separate disposable environments,
-so their loopback traffic does not share the framework's persistent per-IP
-rate-limit budget. Both must pass the `authenticated-boundary` gate; production
-rate limits remain enabled and unchanged.
+submission. It also issues a scoped external service token through the rendered
+dashboard, uses it directly against Go, revokes it, and proves authentication is
+then rejected. The same rehearsal creates, pauses, resumes, rotates, and deletes
+a PostgreSQL-backed webhook and independently checks the resulting management
+audit identifiers and terminal rows. This guards the end-to-end
+numeric boundary from GoFormX #144 and the initial integration lifecycle from
+#168; browser-only fixture tests cannot detect a broken data plane.
+The HTTP/custody, forms-browser, and integrations-browser rehearsals use separate
+disposable environments, so their loopback traffic does not share the framework's
+persistent per-IP rate-limit budget. Every matrix leg must pass the
+`authenticated-boundary` gate; production rate limits remain enabled and unchanged.
 Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,
 or raw credential-adjacent logs are published as test artifacts.

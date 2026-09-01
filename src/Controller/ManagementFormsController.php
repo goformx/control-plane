@@ -6,6 +6,7 @@ namespace App\Controller;
 
 use App\Domain\GoFormX\FormOperation;
 use App\Domain\GoFormX\EntityTag;
+use App\Domain\GoFormX\RequestMediaType;
 use App\Http\InvalidFormRequest;
 use App\Domain\Organization\OrganizationAccessDenied;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
@@ -67,11 +68,15 @@ final readonly class ManagementFormsController
                 [$operation->scope()],
                 $body,
                 ifMatch: $ifMatch,
+                mediaType: $operation === FormOperation::Update ? RequestMediaType::MergePatch : RequestMediaType::Json,
             );
-            $response = new Response($downstream->body, $downstream->statusCode, ['Content-Type' => 'application/json']);
+            $assertionFailure = $downstream->statusCode === 401;
+            $response = $assertionFailure ? $this->error(502, 'Bad Gateway',
+                'The forms API could not authenticate with the data plane. Try again later.') :
+                new Response($downstream->body, $downstream->statusCode, ['Content-Type' => 'application/json']);
             $response->headers->set('Cache-Control', 'no-store');
             $etag = $downstream->headers['etag'] ?? $downstream->headers['ETag'] ?? null;
-            if (is_string($etag) && EntityTag::isStrong($etag)) {
+            if (!$assertionFailure && is_string($etag) && EntityTag::isStrong($etag)) {
                 $response->headers->set('ETag', $etag);
             }
             $traceId = $downstream->headers['x-trace-id'] ?? $downstream->headers['X-Trace-Id'] ?? null;

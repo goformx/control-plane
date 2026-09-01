@@ -87,6 +87,25 @@ final class ManagementFormsControllerTest extends TestCase
         yield 'limit array' => ['limit[]=1'];
         yield 'integer overflow' => ['offset=9999999999999999999999999'];
     }
+
+    public function testDownstreamAssertionFailureCannotMasqueradeAsAnExpiredBrowserSession(): void
+    {
+        $context = new OrganizationRequestContext(
+            new AuthenticatedAccount(7, '11111111-1111-4111-8111-111111111111', 'Person', $this->createStub(EntityInterface::class)),
+            new OrganizationContext('22222222-2222-4222-8222-222222222222', 'Workspace', OrganizationRole::Owner),
+        );
+        $client = $this->createStub(ManagementApiClientInterface::class);
+        $client->method('request')->willReturn(new HttpResponse(401,
+            '{"error":{"message":"server-only-assertion"}}', ['x-trace-id' => '44444444-4444-4444-8444-444444444444']));
+
+        $response = (new ManagementFormsController(new ContextResolverStub($context), $client))->list(
+            Request::create('/api/control-plane/forms'));
+
+        self::assertSame(502, $response->getStatusCode());
+        self::assertStringNotContainsString('server-only-assertion', $response->getContent());
+        self::assertSame('44444444-4444-4444-8444-444444444444', $response->headers->get('X-Trace-Id'));
+        self::assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
 }
 
 final readonly class ContextResolverStub implements OrganizationRequestContextResolverInterface
@@ -122,6 +141,7 @@ final class FormsClientStub implements ManagementApiClientInterface
         array|string|null $body = null,
         ?string $requestId = null,
         ?string $ifMatch = null,
+        \App\Domain\GoFormX\RequestMediaType $mediaType = \App\Domain\GoFormX\RequestMediaType::Json,
     ): HttpResponse {
         $this->path = $path;
         $this->subjectId = $subjectId;
