@@ -120,7 +120,8 @@ test('real browser login → create → publish → integrations → submission,
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);
-  const organizationId = await owner.evaluate(async () => (await (await fetch('/api/control-plane/context')).json()).data.id);
+  const organizationId = owned.organizationId;
+  assert.ok(/^[0-9a-f-]{36}$/i.test(organizationId), 'Owned form organization identifier is unavailable.');
   // Publishing a different policy must not reinterpret an already accepted row.
   const newer = parseJSON(stringify(revised));
   newer.properties.exactInteger.title = 'Newer integer label';
