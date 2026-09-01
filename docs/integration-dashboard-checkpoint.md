@@ -1,9 +1,10 @@
 # Integration dashboard review checkpoint
 
-This is an intentionally unmerged review checkpoint for
+This is an unmerged review checkpoint for
 [GoFormX #123](https://github.com/goformx/goformx/issues/123), not a completed
-acceptance gate or production release. Implementation stops here at the user's
-request, pending independent review.
+acceptance gate or production release. Independent implementation review is
+complete; the remaining cross-service and receiver evidence is being added in
+bounded, reviewable slices.
 
 ## Baselines and ownership
 
@@ -27,6 +28,11 @@ request, pending independent review.
   no-store responses, reveal disposal, stale-operation invalidation and
   uncertain-outcome reconciliation controls.
 - PHP route composition/role/CSRF/projection tests and browser regression tests.
+- A rendered owner workflow through real PHP sessions and the pinned Go process
+  issues and revokes a scoped token, proves direct API access before revocation
+  and rejection afterward, and runs webhook create/pause/resume/secret-rotation/
+  delete against disposable PostgreSQL. A separate read-only database fixture
+  verifies terminal token/webhook state plus unique append-only audit IDs.
 
 ## Local verification
 
@@ -49,11 +55,11 @@ request, pending independent review.
 
 ## Remaining work and review concerns
 
-1. New token/webhook browser workflows are covered with HTTP fixture responses
-   and separately tested PHP composition. They have NOT yet been exercised as
-   a complete browser -> PHP -> Go -> PostgreSQL lifecycle. Existing hosted
-   cross-service suites do not by themselves close that gap. Verify real token
-   revocation, tenant boundaries, audit rows and both credential classes.
+1. The initial browser -> PHP -> Go -> PostgreSQL token and webhook lifecycle is
+   covered, including real token authentication/revocation and independent audit
+   counts. Still extend the gate with member/foreign mutation denial, next-request
+   membership changes, webhook delivery/replay, receiver verification, and both
+   credential classes before treating #168 as complete.
 2. Signed receiver examples, verification and replay-protection guidance remain
    #123/#124 work. A successful HTTP delivery is not proof of signature checking.
 3. Adversarial async probes need broader coverage: hidden tabs, logout, rapid
@@ -72,5 +78,5 @@ request, pending independent review.
    No production deployment, DNS or vault changes were made here.
 
 Review the actual source and canonical OpenAPI rather than accepting this note
-as proof. Keep #123 and the parent roadmap open; do not merge this checkpoint
-or resume the goal without user direction.
+as proof. Keep #123 and the parent roadmap open until their remaining acceptance
+evidence is complete.

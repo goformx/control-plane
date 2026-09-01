@@ -65,7 +65,7 @@ jobs:
         uses: shivammathur/setup-php@f3e473d116dcccaddc5834248c87452386958240 # v2.37.2
         with:
           php-version: '8.5'
-          extensions: fileinfo, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
+          extensions: fileinfo, pdo_pgsql, pdo_sqlite, sqlite3, sodium, zip, mbstring, xml
           coverage: none
 
       - name: Set up Go
@@ -100,6 +100,9 @@ jobs:
             fi
             printf '%s=%s\n' "$name" "$value" >> "$GITHUB_ENV"
           done <<< "$custody"
+          webhook_key="$(openssl rand -base64 32 | tr -d '\n')"
+          echo "::add-mask::$webhook_key"
+          printf 'GOFORMX_WEBHOOK_KEYRING={"ci":"%s"}\n' "$webhook_key" >> "$GITHUB_ENV"
 
       - name: Migrate the disposable GoFormX database
         working-directory: .ci/goformx/goforms
@@ -127,9 +130,12 @@ jobs:
           FIRST_PARTY_ASSERTION_ENABLED: 'true'
           FIRST_PARTY_ASSERTION_ISSUER: https://goformx.com
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
+          WEBHOOK_ENABLED: 'true'
+          WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ci
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
+          WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING" \
             "$RUNNER_TEMP/goformx-api" > "$GOFORMX_CROSS_SERVICE_LOG" 2>&1 &
           echo "GOFORMX_API_PID=$!" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
