@@ -3,13 +3,24 @@
 declare(strict_types=1);
 
 // CLI-only, read-only evidence query for the disposable PostgreSQL rehearsal.
+function rejectEvidenceInput(string $stage): never
+{
+    fwrite(STDERR, json_encode([
+        'stage' => $stage,
+        'exception' => 'None',
+        'file' => basename(__FILE__),
+        'line' => __LINE__,
+    ], JSON_THROW_ON_ERROR));
+    exit(2);
+}
+
 $dsn = getenv('GOFORMX_EVIDENCE_DSN');
 $databaseUser = getenv('GOFORMX_EVIDENCE_USER');
 $databasePassword = getenv('GOFORMX_EVIDENCE_PASSWORD');
 if (PHP_SAPI !== 'cli' || getenv('GOFORMX_BROWSER_REHEARSAL') !== '1' || getenv('APP_ENV') !== 'local'
     || !is_string($dsn) || $dsn === '' || !is_string($databaseUser) || $databaseUser === ''
     || !is_string($databasePassword) || $databasePassword === '') {
-    exit(2);
+    rejectEvidenceInput('guard');
 }
 
 $stage = 'input';
@@ -18,9 +29,9 @@ try {
     $organizationId = is_string($input['organizationId'] ?? null) ? $input['organizationId'] : '';
     $formId = is_string($input['formId'] ?? null) ? $input['formId'] : '';
     $tokenName = is_string($input['tokenName'] ?? null) ? $input['tokenName'] : '';
-    $uuid = '/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i';
+    $uuid = '/^[0-9a-f]{8}-(?:[0-9a-f]{4}-){3}[0-9a-f]{12}$/i';
     if (!preg_match($uuid, $organizationId) || !preg_match($uuid, $formId) || !preg_match('/^browser-token-[0-9a-f-]{36}$/', $tokenName)) {
-        exit(2);
+        rejectEvidenceInput('input');
     }
 
     $stage = 'connect';

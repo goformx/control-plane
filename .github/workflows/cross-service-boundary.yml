@@ -44,9 +44,6 @@ jobs:
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
       GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
-      GOFORMX_EVIDENCE_DSN: pgsql:host=127.0.0.1;port=5432;dbname=goformx
-      GOFORMX_EVIDENCE_USER: goformx
-      GOFORMX_EVIDENCE_PASSWORD: cross-service-only
     steps:
       - name: Checkout control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -177,6 +174,9 @@ jobs:
         if: matrix.suite == 'integrations'
         env:
           GOFORMX_BROWSER_REHEARSAL: '1'
+          GOFORMX_EVIDENCE_DSN: pgsql:host=127.0.0.1;port=5432;dbname=goformx
+          GOFORMX_EVIDENCE_USER: goformx
+          GOFORMX_EVIDENCE_PASSWORD: cross-service-only
         run: npm run test:live:integrations
 
       - name: Rehearse configured custody rotation and real process recovery
