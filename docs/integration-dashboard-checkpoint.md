@@ -37,8 +37,9 @@ being added in bounded, reviewable slices.
   deduplication, old-key dead-letter replay after rotation, and new-key delivery.
   A separate read-only database fixture verifies immutable delivery snapshots,
   terminal token/webhook state and unique management audit IDs after deletion.
-- A second live session proves foreign-workspace isolation, member denial despite
-  denial even when the client supplies an inert forged role header, CSRF enforcement after promotion, next-request promotion,
+- A second live session proves foreign-workspace isolation, member denial even
+  when the client supplies an inert forged role header, CSRF enforcement after
+  promotion, next-request promotion,
   demotion and revocation, in-memory metadata purge after role loss, and anonymous
   denial immediately after the disposable account is externally deleted. A
   before/after data-plane query proves denied transitions did not mutate state or

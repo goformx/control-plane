@@ -33,12 +33,11 @@ test('real integration authorization changes take effect on the next request', {
   };
 
   const users = JSON.parse(fixture({ action: 'create' }));
-  let foreignDeleted = false;
   const browserServer = await chromium.launchServer();
   const browser = await chromium.connect(browserServer.wsEndpoint());
   t.after(async () => {
     try { await browserServer.kill(); }
-    finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }, index) => ({ id, subject, allowMissing: foreignDeleted && index === 1 })) }); }
+    finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }, index) => ({ id, subject, allowMissing: index === 1 })) }); }
   });
   const errors = [], leaked = [];
   async function login(user) {
@@ -160,7 +159,6 @@ test('real integration authorization changes take effect on the next request', {
   assert.equal(afterRevocation, 403);
 
   assert.deepEqual(JSON.parse(fixture({ action: 'delete-account', user: users[1], organizationId: owned.organizationId, confirm: 'delete-disposable-browser-account' })), { ok: true });
-  foreignDeleted = true;
   const afterAccountDeletion = await foreign.evaluate(async () => {
     const response = await fetch('/api/control-plane/context'); await response.text(); return response.status;
   });

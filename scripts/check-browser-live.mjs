@@ -16,9 +16,12 @@ for (const file of files) {
 
 const packageJson = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'));
 const workflow = await readFile(new URL('../.github/workflows/cross-service-boundary.yml', import.meta.url), 'utf8');
+const matrix = ['http', ...[...suites.values()].map(suite => suite.matrix)];
+assert.ok(workflow.includes(`suite: [${matrix.join(', ')}]`), 'The live-browser matrix must enumerate every isolated suite.');
+const workflowSteps = workflow.split(/(?=^ {6}- name: )/m);
 for (const [prefix, suite] of suites) {
   assert.equal(typeof packageJson.scripts?.[suite.script], 'string', `${prefix} needs the ${suite.script} package script.`);
-  assert.ok(workflow.includes(`suite: [http, browser, integrations, authorization]`), 'The live-browser matrix must enumerate every isolated suite.');
-  assert.ok(workflow.includes(`run: npm run ${suite.script}`), `${suite.script} must be invoked by the cross-service workflow.`);
-  assert.ok(workflow.includes(`matrix.suite == '${suite.matrix}'`), `${suite.matrix} must have a dedicated cross-service workflow condition.`);
+  const runLine = new RegExp(`^\\s+run: npm run ${suite.script.replaceAll(':', '\\:')}\\s*$`, 'm');
+  assert.ok(workflowSteps.some(step => step.includes(`if: matrix.suite == '${suite.matrix}'`) && runLine.test(step)),
+    `${suite.script} must be invoked by its dedicated ${suite.matrix} workflow step.`);
 }
