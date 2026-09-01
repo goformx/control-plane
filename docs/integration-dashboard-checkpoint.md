@@ -30,10 +30,10 @@ request, pending independent review.
 
 ## Local verification
 
-- `php vendor/bin/phpunit --no-coverage`: 173 tests, 1,455 assertions passed
+- `php vendor/bin/phpunit --no-coverage`: 175 tests, 1,466 assertions passed
   (configured Unit and Integration suites, not the separate acceptance test).
 - `npm run build` and `npm run check`: generated asset matches; 11 UI tests pass.
-- `npm run test:browser`: 20 tests pass using pinned Playwright Chromium.
+- `npm run test:browser`: 21 tests pass using pinned Playwright Chromium.
 - Strict site doctor: zero findings. Architecture contract: 1 test, 3 assertions.
 - `composer validate --strict` and `git diff --check`: pass.
 - `php bin/maintenance/site-verify`: fails at the generated acceptance test's

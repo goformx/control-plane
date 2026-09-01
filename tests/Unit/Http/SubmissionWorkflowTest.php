@@ -116,6 +116,24 @@ final class SubmissionWorkflowTest extends TestCase
         self::assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
     }
 
+    public function testDeliveryDownstreamDenialIsNotBlamedOnPhpMembership(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createStub(ManagementApiClientInterface::class);
+        $client->method('request')->willReturn(new HttpResponse(403,
+            '{"error":{"code":"forbidden","message":"private-canary"}}'));
+
+        $response = (new ManagementSubmissionsController($resolver, $client))->handle(
+            $this->request(SubmissionOperation::Deliveries), SubmissionOperation::Deliveries);
+        $payload = json_decode($response->getContent(), true, flags: JSON_THROW_ON_ERROR);
+
+        self::assertSame(403, $response->getStatusCode());
+        self::assertSame('data_plane_access_denied', $payload['error']['code']);
+        self::assertStringContainsString('data plane denied', $payload['error']['message']);
+        self::assertStringNotContainsString('private-canary', $response->getContent());
+    }
+
     public function testQueryDuplicatesAndExactExportBodyReachTheCanonicalValidatorUnchanged(): void
     {
         $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);

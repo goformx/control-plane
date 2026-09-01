@@ -20,6 +20,7 @@ final readonly class ManagementIntegrationsController
 
     public function handle(Request $request, IntegrationOperation $operation): Response
     {
+        $headers = [];
         try {
             if ($operation->method() !== 'GET') {
                 $expected = $request->hasSession() ? $request->getSession()->get('_csrf_token') : null;
@@ -71,7 +72,7 @@ final readonly class ManagementIntegrationsController
                 $context->organization->organizationId, $form, $delivery), $expectedStatus)), $headers, $downstream->statusCode);
         } catch (OrganizationAccessDenied) { return $this->error(403);
         } catch (\InvalidArgumentException|\JsonException) { return $this->error(400);
-        } catch (\Throwable) { return $this->error(502); }
+        } catch (\Throwable) { return $this->safeDownstreamHeaders($this->error(502), $headers, 0); }
     }
 
     private function error(int $status, ?string $noCommitCode = null, bool $downstream = false): Response

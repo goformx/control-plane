@@ -171,12 +171,15 @@ final class IntegrationWorkflowTest extends TestCase
         $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
         $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
         $client = $this->createMock(ManagementApiClientInterface::class);
-        $client->expects(self::exactly(2))->method('request')->willReturnOnConsecutiveCalls(
+        $client->expects(self::exactly(3))->method('request')->willReturnOnConsecutiveCalls(
             new HttpResponse(200, json_encode(['data' => [$this->token()]]), [
                 'content-type' => 'application/json', 'x-trace-id' => $trace, 'retry-after' => 'private-canary',
             ]),
             new HttpResponse(429, '{"error":{"code":"rate_limited"}}', [
                 'x-trace-id' => $trace, 'retry-after' => '7', 'set-cookie' => 'private-canary',
+            ]),
+            new HttpResponse(200, '{"data":"malformed-private-canary"}', [
+                'content-type' => 'application/json', 'x-trace-id' => $trace, 'set-cookie' => 'private-canary',
             ]),
         );
         $controller = new ManagementIntegrationsController($resolver, $client);
@@ -188,6 +191,10 @@ final class IntegrationWorkflowTest extends TestCase
         self::assertSame($trace, $limited->headers->get('X-Trace-Id'));
         self::assertSame('7', $limited->headers->get('Retry-After'));
         self::assertFalse($limited->headers->has('Set-Cookie'));
+        $rejected = $controller->handle($this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens);
+        self::assertSame(502, $rejected->getStatusCode());
+        self::assertSame($trace, $rejected->headers->get('X-Trace-Id'));
+        self::assertStringNotContainsString('private-canary', $rejected->getContent());
     }
 
     private function context(OrganizationRole $role): OrganizationRequestContext
