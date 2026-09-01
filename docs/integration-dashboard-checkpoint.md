@@ -44,6 +44,13 @@ being added in bounded, reviewable slices.
   denial immediately after the disposable account is externally deleted. A
   before/after data-plane query proves denied transitions did not mutate state or
   append management audits.
+- A dedicated response-loss rehearsal forwards real token and webhook mutations
+  to Go, waits for their committed response, then drops that response before PHP
+  receives it. The dashboard locks blind retries, reloads durable metadata,
+  revokes the unclaimed token, and requires explicit reconciliation before the
+  next mutation. Read-only PostgreSQL checks and service-log scans also prove
+  token plaintext and webhook signing secrets are not retained in durable
+  credential fields or credential-adjacent logs.
 
 ## Local verification
 
@@ -66,11 +73,12 @@ being added in bounded, reviewable slices.
 
 ## Remaining work and review concerns
 
-1. The initial browser -> PHP -> Go -> PostgreSQL token and webhook lifecycle is
+1. The browser -> PHP -> Go -> PostgreSQL token and webhook lifecycle is
    covered, including real token authentication/revocation, signed delivery,
    receiver verification, retry/replay, authorization changes and independent
-   audit counts. Still extend the gate with failure/uncertain-outcome paths and
-   broader credential-lifetime evidence before treating #168 as complete.
+   audit counts, committed-response loss, explicit reconciliation, and direct
+   credential-lifetime evidence. Review the remaining adversarial async and
+   bounded-history concerns below before treating #168 as complete.
 2. The published #124 receiver example is now exercised by the canonical live
    gate. Keep receiver operations guidance current as delivery behavior evolves;
    a generic successful HTTP delivery is still not proof of signature checking.

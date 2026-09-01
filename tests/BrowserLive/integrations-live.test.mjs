@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { chromium } from 'playwright';
 
 test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle', { timeout: 90000 }, async t => {
@@ -155,6 +156,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   assert.ok((await beforeRevoke.text()).includes(owned.id), 'Scoped token did not return the owned form; body withheld.');
   await page.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
   await waitForIntegration(`${integrationName} · active`, { exact: true });
+  assert.equal(await page.locator('#issued-token').inputValue(), '', 'A later dashboard action must clear the one-time token reveal.');
   page.once('dialog', dialog => dialog.accept());
   await page.getByRole('button', { name: `Revoke ${integrationName}`, exact: true }).click();
   await waitForIntegration('Token revoked. It cannot authenticate new API requests.', { exact: true });
@@ -248,8 +250,10 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   await page.getByRole('button', { name: 'Remove webhook endpoint', exact: true }).click();
   await waitForIntegration('No webhook endpoint is configured for this form.', { exact: true });
 
-  const durable = dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName });
+  const durable = dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName,
+    tokenPlaintext: externalToken, webhookSecrets: [previousSecret, currentSecret] });
   assert.deepEqual([durable.activeTokenCount, durable.revokedTokenCount, durable.webhookEndpointCount], [0, 1, 0]);
+  assert.deepEqual([durable.plaintextTokenMatches, durable.plaintextWebhookConfigMatches], [0, 0]);
   assert.deepEqual(new Set(durable.deliveries.map(delivery => delivery.endpointId)).size, 1);
   assert.ok(durable.deliveries.every(delivery => delivery.origin === 'https://receiver.goformx.test' && delivery.hasEncryptedConfig));
   assert.deepEqual(Object.fromEntries(durable.deliveries.map(delivery => [delivery.id, [delivery.status, delivery.attemptCount, delivery.lastHttpStatus]])), {
@@ -263,6 +267,12 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   ]);
   assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
   assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
+
+  const logs = [process.env.GOFORMX_CROSS_SERVICE_LOG, process.env.GOFORMX_CROSS_SERVICE_UI_LOG, process.env.GOFORMX_WEBHOOK_RECEIVER_LOG]
+    .map(path => readFileSync(path, 'utf8')).join('\n');
+  for (const secret of [externalToken, previousSecret, currentSecret]) {
+    assert.equal(logs.includes(secret), false, 'Service logs must not retain browser-managed credentials.');
+  }
 
   assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
   assert.deepEqual(leaked, []);
