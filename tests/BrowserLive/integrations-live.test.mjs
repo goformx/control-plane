@@ -54,8 +54,9 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.waitForURL(uiUrl + '/app');
   try { await page.getByText('owner · Server-authorized workspace').waitFor(); }
-  catch {
+  catch (error) {
     const detail = await page.locator('#error-message').textContent();
+    if (!detail) throw error;
     throw new Error(`Workspace initialization failed: ${detail}; credentials and raw responses withheld.`);
   }
   async function waitForIntegration(text, options = {}) {
@@ -131,6 +132,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   let projectedBody;
   try { projectedBody = JSON.parse(projectedText); }
   catch { throw new Error('Projected webhook response was not valid JSON; body withheld.'); }
+  assert.ok(projectedBody?.data && typeof projectedBody.data === 'object', 'Projected webhook response returned no data; body withheld.');
   assert.deepEqual(Object.keys(projectedBody.data).sort(), ['enabled', 'formId', 'origin', 'updatedAt']);
   assert.ok(!JSON.stringify(projectedBody).includes('browser-live-original-signing-key-123456'), 'Projected webhook response exposed its signing secret.');
   assert.ok(!JSON.stringify(projectedBody).includes('X-Receiver-Fixture'), 'Projected webhook response exposed write-only headers.');

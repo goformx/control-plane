@@ -136,10 +136,13 @@ jobs:
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
           WEBHOOK_ENABLED: ${{ matrix.suite == 'integrations' && 'true' || 'false' }}
           WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ matrix.suite == 'integrations' && 'ci' || '' }}
+          GOFORMX_BOUNDARY_SUITE: ${{ matrix.suite }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
+          if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" ]]; then
+            export WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING"
+          fi
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
-          WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING" \
             "$RUNNER_TEMP/goformx-api" > "$GOFORMX_CROSS_SERVICE_LOG" 2>&1 &
           echo "GOFORMX_API_PID=$!" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
