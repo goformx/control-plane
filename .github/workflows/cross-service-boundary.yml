@@ -44,6 +44,10 @@ jobs:
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
       GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
+      GOFORMX_WEBHOOK_RECEIVER_URL: https://receiver.goformx.test/hooks/goformx
+      GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL: http://127.0.0.1:18092
+      GOFORMX_WEBHOOK_CURRENT_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-current-signing-key-123456' || '' }}
+      GOFORMX_WEBHOOK_PREVIOUS_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-previous-signing-key-123456' || '' }}
     steps:
       - name: Checkout control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -53,12 +57,17 @@ jobs:
           echo "WAASEYAA_DB=$RUNNER_TEMP/control-plane.sqlite" >> "$GITHUB_ENV"
           echo "GOFORMX_CROSS_SERVICE_LOG=$RUNNER_TEMP/goformx-api.log" >> "$GITHUB_ENV"
           echo "GOFORMX_CROSS_SERVICE_UI_LOG=$RUNNER_TEMP/control-plane.log" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_LOG=$RUNNER_TEMP/webhook-receiver.log" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_CA=$RUNNER_TEMP/webhook-receiver-ca.pem" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_CERT=$RUNNER_TEMP/webhook-receiver.pem" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_KEY=$RUNNER_TEMP/webhook-receiver-key.pem" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_PID_FILE=$RUNNER_TEMP/webhook-receiver.pid" >> "$GITHUB_ENV"
 
       - name: Checkout the accepted Go data-plane boundary
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: goformx/goformx
-          ref: 9a73623d7aa194019a2d3c800e7c9d3f0b4eede1
+          ref: c904fe1e0d70b7af6a62ebe2704582510ce8f1ae
           path: .ci/goformx
 
       - name: Set up PHP
@@ -90,6 +99,54 @@ jobs:
         if: matrix.suite != 'http'
       - run: npx --no-install playwright install --with-deps chromium
         if: matrix.suite != 'http'
+
+      - name: Build the pinned receiver verifier
+        if: matrix.suite == 'integrations'
+        working-directory: .ci/goformx/goforms
+        run: |
+          npm ci --ignore-scripts
+          npm run contract:build
+
+      - name: Start a trusted public-address receiver fixture
+        if: matrix.suite == 'integrations'
+        run: |
+          echo "::add-mask::$GOFORMX_WEBHOOK_CURRENT_SECRET"
+          echo "::add-mask::$GOFORMX_WEBHOOK_PREVIOUS_SECRET"
+          openssl req -x509 -newkey rsa:2048 -nodes -days 1 \
+            -keyout "$RUNNER_TEMP/webhook-receiver-ca-key.pem" \
+            -out "$GOFORMX_WEBHOOK_RECEIVER_CA" -subj '/CN=GoFormX cross-service receiver CA' >/dev/null 2>&1
+          openssl req -newkey rsa:2048 -nodes \
+            -keyout "$GOFORMX_WEBHOOK_RECEIVER_KEY" -out "$RUNNER_TEMP/webhook-receiver.csr" \
+            -subj '/CN=receiver.goformx.test' >/dev/null 2>&1
+          printf 'subjectAltName=DNS:receiver.goformx.test\nextendedKeyUsage=serverAuth\n' > "$RUNNER_TEMP/webhook-receiver.ext"
+          openssl x509 -req -days 1 -in "$RUNNER_TEMP/webhook-receiver.csr" \
+            -CA "$GOFORMX_WEBHOOK_RECEIVER_CA" -CAkey "$RUNNER_TEMP/webhook-receiver-ca-key.pem" \
+            -CAcreateserial -extfile "$RUNNER_TEMP/webhook-receiver.ext" \
+            -out "$GOFORMX_WEBHOOK_RECEIVER_CERT" >/dev/null 2>&1
+          echo '8.8.8.8 receiver.goformx.test' | sudo tee -a /etc/hosts >/dev/null
+          # A public-classified address is intentional: Go's production SSRF
+          # policy rejects loopback/private peers and revalidates on every dial.
+          sudo ip address add 8.8.8.8/32 dev lo
+          : > "$GOFORMX_WEBHOOK_RECEIVER_PID_FILE"
+          sudo env \
+            GOFORMX_BROWSER_REHEARSAL=1 \
+            GOFORMX_WEBHOOK_RECEIVER_HOST=8.8.8.8 \
+            GOFORMX_WEBHOOK_VERIFIER="$GITHUB_WORKSPACE/.ci/goformx/goforms/.contract-client/examples/webhook-receiver.mjs" \
+            GOFORMX_WEBHOOK_RECEIVER_CERT="$GOFORMX_WEBHOOK_RECEIVER_CERT" \
+            GOFORMX_WEBHOOK_RECEIVER_KEY="$GOFORMX_WEBHOOK_RECEIVER_KEY" \
+            GOFORMX_WEBHOOK_RECEIVER_PID_FILE="$GOFORMX_WEBHOOK_RECEIVER_PID_FILE" \
+            GOFORMX_WEBHOOK_CURRENT_SECRET="$GOFORMX_WEBHOOK_CURRENT_SECRET" \
+            GOFORMX_WEBHOOK_PREVIOUS_SECRET="$GOFORMX_WEBHOOK_PREVIOUS_SECRET" \
+            "$(command -v node)" tests/BrowserLive/fixtures/webhook-receiver.mjs \
+            > "$GOFORMX_WEBHOOK_RECEIVER_LOG" 2>&1 &
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent "$GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL/health" > /dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Webhook receiver did not become ready. Receiver logs are not published."
+          exit 1
 
       - name: Generate ephemeral assertion custody
         run: |
@@ -136,11 +193,18 @@ jobs:
           FIRST_PARTY_ASSERTION_AUDIENCE: https://api.goformx.com
           WEBHOOK_ENABLED: ${{ matrix.suite == 'integrations' && 'true' || 'false' }}
           WEBHOOK_ACTIVE_ENCRYPTION_KEY_ID: ${{ matrix.suite == 'integrations' && 'ci' || '' }}
+          WEBHOOK_POLL_INTERVAL: ${{ matrix.suite == 'integrations' && '250ms' || '' }}
+          WEBHOOK_REQUEST_TIMEOUT: ${{ matrix.suite == 'integrations' && '3s' || '' }}
+          WEBHOOK_LOCK_TIMEOUT: ${{ matrix.suite == 'integrations' && '5s' || '' }}
+          WEBHOOK_MAX_ATTEMPTS: ${{ matrix.suite == 'integrations' && '2' || '' }}
+          WEBHOOK_BACKOFF_BASE: ${{ matrix.suite == 'integrations' && '1s' || '' }}
+          WEBHOOK_BACKOFF_MAX: ${{ matrix.suite == 'integrations' && '1s' || '' }}
           GOFORMX_BOUNDARY_SUITE: ${{ matrix.suite }}
         run: |
           go build -o "$RUNNER_TEMP/goformx-api" ./cmd/api
           if [[ "$GOFORMX_BOUNDARY_SUITE" == "integrations" ]]; then
             export WEBHOOK_ENCRYPTION_KEYRING="$GOFORMX_WEBHOOK_KEYRING"
+            export SSL_CERT_FILE="$GOFORMX_WEBHOOK_RECEIVER_CA"
           fi
           FIRST_PARTY_ASSERTION_JWKS_SNAPSHOT="$GOFORMX_DATA_PLANE_JWKS_SNAPSHOT" \
             "$RUNNER_TEMP/goformx-api" > "$GOFORMX_CROSS_SERVICE_LOG" 2>&1 &
@@ -203,6 +267,16 @@ jobs:
           fi
           if [[ -n "${GOFORMX_UI_PID:-}" ]]; then
             kill "$GOFORMX_UI_PID" 2>/dev/null || true
+          fi
+          if [[ -f "${GOFORMX_WEBHOOK_RECEIVER_PID_FILE:-}" ]]; then
+            receiver_pid="$(cat "$GOFORMX_WEBHOOK_RECEIVER_PID_FILE")"
+            if [[ "$receiver_pid" =~ ^[1-9][0-9]*$ ]]; then
+              sudo kill "$receiver_pid" 2>/dev/null || true
+            fi
+          fi
+          if [[ "${{ matrix.suite }}" == "integrations" ]]; then
+            sudo ip address del 8.8.8.8/32 dev lo 2>/dev/null || true
+            sudo sed -i '/receiver\.goformx\.test/d' /etc/hosts || true
           fi
 
   authenticated-boundary:

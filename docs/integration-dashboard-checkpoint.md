@@ -1,16 +1,15 @@
 # Integration dashboard review checkpoint
 
-This is an unmerged review checkpoint for
-[GoFormX #123](https://github.com/goformx/goformx/issues/123), not a completed
-acceptance gate or production release. Independent implementation review is
-complete; the remaining cross-service and receiver evidence is being added in
-bounded, reviewable slices.
+This records the merged dashboard slice and the follow-up evidence for
+[GoFormX #168](https://github.com/goformx/goformx/issues/168), not a completed
+acceptance gate or production release. The remaining cross-service evidence is
+being added in bounded, reviewable slices.
 
 ## Baselines and ownership
 
-- Control-plane base: `83b4d7bed646a6b91b33dae567085b0de3175075` (PR #16).
-- Data-plane dependency: `9a73623d7aa194019a2d3c800e7c9d3f0b4eede1`
-  (GoFormX PR #156). The cross-service workflow is pinned to this exact commit.
+- Control-plane base: `1a4d4d5` (merged PR #17).
+- Data-plane dependency: `c904fe1e0d70b7af6a62ebe2704582510ce8f1ae`
+  (GoFormX PR #178). The cross-service workflow is pinned to this exact commit.
 - Related merged backend work: GoFormX #153 submission export, #154 storage-key
   rotation, #155 atomic token audit, #156 atomic webhook lifecycle audit.
 - PHP owns sessions and fresh organization membership resolution. Go owns
@@ -31,8 +30,13 @@ bounded, reviewable slices.
 - A rendered owner workflow through real PHP sessions and the pinned Go process
   issues and revokes a scoped token, proves direct API access before revocation
   and rejection afterward, and runs webhook create/pause/resume/secret-rotation/
-  delete against disposable PostgreSQL. A separate read-only database fixture
-  verifies terminal token/webhook state plus unique management audit IDs.
+  delete against disposable PostgreSQL.
+- The same workflow publishes a form and sends real deliveries to an ephemeral
+  HTTPS receiver using the published TypeScript verifier. It proves signature
+  and timestamp rejection cases from a captured production delivery, retry
+  deduplication, old-key dead-letter replay after rotation, and new-key delivery.
+  A separate read-only database fixture verifies immutable delivery snapshots,
+  terminal token/webhook state and unique management audit IDs after deletion.
 
 ## Local verification
 
@@ -56,12 +60,14 @@ bounded, reviewable slices.
 ## Remaining work and review concerns
 
 1. The initial browser -> PHP -> Go -> PostgreSQL token and webhook lifecycle is
-   covered, including real token authentication/revocation and independent audit
-   counts. Still extend the gate with member/foreign mutation denial, next-request
-   membership changes, webhook delivery/replay, receiver verification, and both
-   credential classes before treating #168 as complete.
-2. Signed receiver examples, verification and replay-protection guidance remain
-   #123/#124 work. A successful HTTP delivery is not proof of signature checking.
+   covered, including real token authentication/revocation, signed delivery,
+   receiver verification, retry/replay and independent audit counts. Still extend
+   the gate with member/foreign mutation denial, next-request membership changes,
+   failure/uncertain-outcome paths and broader credential-lifetime evidence before
+   treating #168 as complete.
+2. The published #124 receiver example is now exercised by the canonical live
+   gate. Keep receiver operations guidance current as delivery behavior evolves;
+   a generic successful HTTP delivery is still not proof of signature checking.
 3. Adversarial async probes need broader coverage: hidden tabs, logout, rapid
    form switching, stale responses, role changes and partial mutation responses.
    Current browser regressions cover only a subset. Do not infer comprehensive
