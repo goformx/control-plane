@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [http, browser, integrations]
+        suite: [http, browser, integrations, authorization]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -249,6 +249,15 @@ jobs:
           GOFORMX_EVIDENCE_USER: goformx
           GOFORMX_EVIDENCE_PASSWORD: cross-service-only
         run: npm run test:live:integrations
+
+      - name: Exercise live integration authorization changes
+        if: matrix.suite == 'authorization'
+        env:
+          GOFORMX_BROWSER_REHEARSAL: '1'
+          GOFORMX_EVIDENCE_DSN: pgsql:host=127.0.0.1;port=5432;dbname=goformx
+          GOFORMX_EVIDENCE_USER: goformx
+          GOFORMX_EVIDENCE_PASSWORD: cross-service-only
+        run: npm run test:live:authorization
 
       - name: Rehearse configured custody rotation and real process recovery
         if: matrix.suite == 'http'

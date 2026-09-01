@@ -37,6 +37,13 @@ being added in bounded, reviewable slices.
   deduplication, old-key dead-letter replay after rotation, and new-key delivery.
   A separate read-only database fixture verifies immutable delivery snapshots,
   terminal token/webhook state and unique management audit IDs after deletion.
+- A second live session proves foreign-workspace isolation, member denial even
+  when the client supplies an inert forged role header, CSRF enforcement after
+  promotion, next-request promotion,
+  demotion and revocation, in-memory metadata purge after role loss, and anonymous
+  denial immediately after the disposable account is externally deleted. A
+  before/after data-plane query proves denied transitions did not mutate state or
+  append management audits.
 
 ## Local verification
 
@@ -61,10 +68,9 @@ being added in bounded, reviewable slices.
 
 1. The initial browser -> PHP -> Go -> PostgreSQL token and webhook lifecycle is
    covered, including real token authentication/revocation, signed delivery,
-   receiver verification, retry/replay and independent audit counts. Still extend
-   the gate with member/foreign mutation denial, next-request membership changes,
-   failure/uncertain-outcome paths and broader credential-lifetime evidence before
-   treating #168 as complete.
+   receiver verification, retry/replay, authorization changes and independent
+   audit counts. Still extend the gate with failure/uncertain-outcome paths and
+   broader credential-lifetime evidence before treating #168 as complete.
 2. The published #124 receiver example is now exercised by the canonical live
    gate. Keep receiver operations guidance current as delivery behavior evolves;
    a generic successful HTTP delivery is still not proof of signature checking.

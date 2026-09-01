@@ -263,6 +263,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   ]);
   assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
   assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
+
   assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
   assert.deepEqual(leaked, []);
   assert.deepEqual(errors, []);
