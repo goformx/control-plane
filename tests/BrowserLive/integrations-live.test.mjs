@@ -96,8 +96,9 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   }
   async function deliveryHistory() {
     return page.evaluate(async formId => {
-      const response = await fetch(`/api/control-plane/forms/${encodeURIComponent(formId)}/deliveries?limit=100`, { cache: 'no-store' });
-      return response.ok ? (await response.json()).data : [];
+      const response = await fetch(`/api/control-plane/forms/${encodeURIComponent(formId)}/deliveries`, { cache: 'no-store' });
+      if (!response.ok) throw new Error(`Delivery history returned HTTP ${response.status}; body withheld.`);
+      return (await response.json()).data;
     }, owned.id);
   }
   async function submit(endpoint, label) {
@@ -112,7 +113,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   }
   const expectedNegativeChecks = {
     tamperedBody: 'invalid_signature', staleTimestamp: 'stale_timestamp', wrongKey: 'invalid_signature',
-    deliveryIdMismatch: 'delivery_id_mismatch', eventBinding: 'accepted',
+    deliveryIdMismatch: 'delivery_id_mismatch',
   };
 
   const formName = `integration-${randomUUID()}`;

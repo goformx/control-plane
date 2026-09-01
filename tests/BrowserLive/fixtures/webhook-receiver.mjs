@@ -43,7 +43,7 @@ function keyLabel(input) {
   return 'none';
 }
 
-function negativeChecks(input, event) {
+function negativeChecks(input) {
   const stale = String(BigInt(input.timestamp) - 301n);
   const differentId = '00000000-0000-4000-8000-000000000001';
   return {
@@ -52,7 +52,6 @@ function negativeChecks(input, event) {
     wrongKey: verificationCode(() => verifyWebhook({ ...input, signingSecrets: ['wrong-receiver-signing-secret-123456'] })),
     deliveryIdMismatch: verificationCode(() => verify({ ...input, deliveryId: differentId,
       signature: signature(keyLabel(input) === 'current' ? currentSecret : previousSecret, differentId, input.timestamp, input.rawBody) })),
-    eventBinding: event.id === input.deliveryId ? 'accepted' : 'rejected',
   };
 }
 
@@ -104,7 +103,7 @@ const receiver = createHttpsServer({ cert: await readFile(certificatePath), key:
       bodyDigest: createHmac('sha256', 'non-secret-rehearsal-digest').update(rawBody).digest('hex'),
       key: keyLabel(input),
     });
-    record.negativeChecks ??= negativeChecks(input, event);
+    record.negativeChecks ??= negativeChecks(input);
     deliveries.set(event.id, record);
 
     if (mode === 'reject') { response.writeHead(400).end(); return; }

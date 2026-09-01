@@ -267,9 +267,9 @@ jobs:
           if [[ -n "${GOFORMX_WEBHOOK_RECEIVER_PID:-}" ]]; then
             sudo kill "$GOFORMX_WEBHOOK_RECEIVER_PID" 2>/dev/null || true
           fi
-          if [[ "${GOFORMX_BOUNDARY_SUITE:-}" == "integrations" ]]; then
+          if [[ "${{ matrix.suite }}" == "integrations" ]]; then
             sudo ip address del 8.8.8.8/32 dev lo 2>/dev/null || true
-            sudo sed -i '/receiver\.goformx\.test/d' /etc/hosts
+            sudo sed -i '/receiver\.goformx\.test/d' /etc/hosts || true
           fi
 
   authenticated-boundary:
