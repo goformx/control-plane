@@ -42,11 +42,12 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   };
 
   const users = JSON.parse(fixture({ action: 'create' }));
+  let foreignDeleted = false;
   const browserServer = await chromium.launchServer();
   const browser = await chromium.connect(browserServer.wsEndpoint());
   t.after(async () => {
     try { await browserServer.kill(); }
-    finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }) => ({ id, subject })) }); }
+    finally { fixture({ action: 'cleanup', users: users.map(({ id, subject }, index) => ({ id, subject, allowMissing: foreignDeleted && index === 1 })) }); }
   });
   const page = await browser.newPage();
   page.setDefaultTimeout(15000);
@@ -263,6 +264,100 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   ]);
   assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);
   assert.ok(durable.events.every(event => /^[0-9a-f-]{36}$/i.test(event.auditId)));
+
+  const foreignContext = await browser.newContext();
+  const foreign = await foreignContext.newPage();
+  foreign.setDefaultTimeout(15000);
+  foreign.on('pageerror', error => errors.push(error.message));
+  foreign.on('request', request => { if (request.headers().authorization) leaked.push(request.url()); });
+  const foreignLogin = await foreign.goto(uiUrl + '/login');
+  assert.equal(foreignLogin.status(), 200);
+  await foreign.getByLabel('Email', { exact: true }).fill(users[1].email);
+  await foreign.getByLabel('Password', { exact: true }).fill(users[1].password);
+  await foreign.getByRole('button', { name: 'Sign in', exact: true }).click();
+  await foreign.waitForURL(uiUrl + '/app');
+  await foreign.getByText('owner · Server-authorized workspace').waitFor();
+
+  const foreignDenial = await foreign.evaluate(async ({ formId, tokenName }) => {
+    const tokens = await fetch('/api/control-plane/service-tokens');
+    const tokenBody = await tokens.text();
+    const resources = await Promise.all([fetch(`/api/control-plane/forms/${formId}/webhook`), fetch(`/api/control-plane/forms/${formId}/deliveries`)]);
+    return { tokenStatus: tokens.status, leakedToken: tokenBody.includes(tokenName),
+      resourceStatuses: await Promise.all(resources.map(async response => { await response.text(); return response.status; })) };
+  }, { formId: owned.id, tokenName: integrationName });
+  assert.deepEqual(foreignDenial, { tokenStatus: 200, leakedToken: false, resourceStatuses: [404, 404] });
+
+  assert.deepEqual(JSON.parse(fixture({ action: 'grant-membership', user: users[1], organizationId: owned.organizationId, role: 'member' })), { ok: true });
+  const switched = await foreign.evaluate(async organizationId => {
+    const token = decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+    const response = await fetch('/api/control-plane/context/switch', { method: 'POST', headers: {
+      'Content-Type': 'application/json', 'X-XSRF-TOKEN': token,
+    }, body: JSON.stringify({ organization_id: organizationId }) });
+    return { status: response.status, body: await response.json() };
+  }, owned.organizationId);
+  assert.equal(switched.status, 200);
+  assert.equal(switched.body.data.id, owned.organizationId);
+  assert.equal(switched.body.data.attributes.role, 'member');
+  await foreign.reload();
+  await foreign.getByText('member · Server-authorized workspace').waitFor();
+  await foreign.getByRole('button', { name: /Integration lifecycle gate/ }).click();
+  await foreign.getByRole('heading', { name: 'Integration lifecycle gate', exact: true }).waitFor();
+  assert.equal(await foreign.getByRole('button', { name: 'Manage API access', exact: true }).isDisabled(), true);
+  assert.equal(await foreign.locator('#webhook-access').isVisible(), true);
+
+  const deniedMutationName = `denied-token-${randomUUID()}`;
+  const memberDenial = await foreign.evaluate(async ({ formId, name }) => {
+    const token = decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+    const headers = { 'Content-Type': 'application/json', 'X-XSRF-TOKEN': token, 'X-Role': 'owner' };
+    const requests = [
+      fetch('/api/control-plane/service-tokens'), fetch(`/api/control-plane/forms/${formId}/webhook`),
+      fetch(`/api/control-plane/forms/${formId}/deliveries`),
+      fetch('/api/control-plane/service-tokens', { method: 'POST', headers,
+        body: JSON.stringify({ name, scopes: ['forms:read'], expiresInSeconds: 86400 }) }),
+    ];
+    return Promise.all(requests).then(responses => Promise.all(responses.map(async response => { await response.text(); return response.status; })));
+  }, { formId: owned.id, name: deniedMutationName });
+  assert.deepEqual(memberDenial, [403, 403, 403, 403]);
+
+  assert.deepEqual(JSON.parse(fixture({ action: 'change-membership', user: users[1], organizationId: owned.organizationId, role: 'admin', status: 'active' })), { ok: true });
+  await foreign.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await foreign.getByText('admin · Server-authorized workspace').waitFor();
+  assert.equal(await foreign.getByRole('button', { name: 'Manage API access', exact: true }).isEnabled(), true);
+  await foreign.getByRole('button', { name: 'Manage API access', exact: true }).click();
+  await foreign.getByText(`${integrationName} · revoked`, { exact: true }).waitFor();
+  const adminBoundary = await foreign.evaluate(async ({ name }) => {
+    const noCsrf = await fetch('/api/control-plane/service-tokens', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, scopes: ['forms:read'], expiresInSeconds: 86400 }) });
+    const tokens = await fetch('/api/control-plane/service-tokens');
+    await noCsrf.text(); await tokens.text();
+    return [noCsrf.status, tokens.status];
+  }, { name: `csrf-token-${randomUUID()}` });
+  assert.deepEqual(adminBoundary, [403, 200]);
+
+  assert.deepEqual(JSON.parse(fixture({ action: 'change-membership', user: users[1], organizationId: owned.organizationId, role: 'member', status: 'active' })), { ok: true });
+  await foreign.getByRole('button', { name: 'Refresh', exact: true }).click();
+  await foreign.getByText('member · Server-authorized workspace').waitFor();
+  assert.equal(await foreign.getByRole('button', { name: 'Manage API access', exact: true }).isDisabled(), true);
+  assert.equal(await foreign.locator('#token-list').textContent(), '');
+  assert.equal(await foreign.locator('#tokens-panel').isVisible(), false);
+  assert.equal(await foreign.locator('#webhook-state').textContent(), 'Load this form’s webhook to see its current state.');
+
+  assert.deepEqual(JSON.parse(fixture({ action: 'change-membership', user: users[1], organizationId: owned.organizationId, role: 'member', status: 'revoked' })), { ok: true });
+  const afterRevocation = await foreign.evaluate(async () => {
+    const response = await fetch('/api/control-plane/service-tokens'); await response.text(); return response.status;
+  });
+  assert.equal(afterRevocation, 403);
+
+  assert.deepEqual(JSON.parse(fixture({ action: 'delete-account', user: users[1], organizationId: owned.organizationId, confirm: 'delete-disposable-browser-account' })), { ok: true });
+  foreignDeleted = true;
+  const afterAccountDeletion = await foreign.evaluate(async () => {
+    const response = await fetch('/api/control-plane/context'); await response.text(); return response.status;
+  });
+  assert.equal(afterAccountDeletion, 401);
+  await foreignContext.close();
+
+  const afterDenied = dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName });
+  assert.deepEqual(afterDenied, durable, 'Denied, stale-role, revoked-membership and deleted-account requests cannot change data-plane state or audits.');
   assert.deepEqual(await page.evaluate(() => [localStorage.length, sessionStorage.length]), [0, 0]);
   assert.deepEqual(leaked, []);
   assert.deepEqual(errors, []);
