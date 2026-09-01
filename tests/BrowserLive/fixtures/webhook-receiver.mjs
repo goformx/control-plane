@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, writeFile } from 'node:fs/promises';
 import { createServer as createHttpServer } from 'node:http';
 import { createServer as createHttpsServer } from 'node:https';
 import { pathToFileURL } from 'node:url';
@@ -10,9 +10,10 @@ const receiverHost = process.env.GOFORMX_WEBHOOK_RECEIVER_HOST;
 const verifierPath = process.env.GOFORMX_WEBHOOK_VERIFIER;
 const certificatePath = process.env.GOFORMX_WEBHOOK_RECEIVER_CERT;
 const keyPath = process.env.GOFORMX_WEBHOOK_RECEIVER_KEY;
+const pidFile = process.env.GOFORMX_WEBHOOK_RECEIVER_PID_FILE;
 const currentSecret = process.env.GOFORMX_WEBHOOK_CURRENT_SECRET;
 const previousSecret = process.env.GOFORMX_WEBHOOK_PREVIOUS_SECRET;
-if (!receiverHost || !verifierPath || !certificatePath || !keyPath || !currentSecret || !previousSecret) {
+if (!receiverHost || !verifierPath || !certificatePath || !keyPath || !pidFile || !currentSecret || !previousSecret) {
   throw new Error('Receiver configuration is incomplete.');
 }
 
@@ -132,6 +133,7 @@ const control = createHttpServer(async (request, response) => {
   response.writeHead(404).end('{"error":"not_found"}');
 });
 
+await writeFile(pidFile, String(process.pid), { encoding: 'utf8' });
 receiver.listen(443, receiverHost);
 control.listen(18092, '127.0.0.1');
 

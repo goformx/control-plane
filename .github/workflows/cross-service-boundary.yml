@@ -46,8 +46,8 @@ jobs:
       GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
       GOFORMX_WEBHOOK_RECEIVER_URL: https://receiver.goformx.test/hooks/goformx
       GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL: http://127.0.0.1:18092
-      GOFORMX_WEBHOOK_CURRENT_SECRET: cross-service-current-signing-key-123456
-      GOFORMX_WEBHOOK_PREVIOUS_SECRET: cross-service-previous-signing-key-123456
+      GOFORMX_WEBHOOK_CURRENT_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-current-signing-key-123456' || '' }}
+      GOFORMX_WEBHOOK_PREVIOUS_SECRET: ${{ matrix.suite == 'integrations' && 'cross-service-previous-signing-key-123456' || '' }}
     steps:
       - name: Checkout control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -61,6 +61,7 @@ jobs:
           echo "GOFORMX_WEBHOOK_RECEIVER_CA=$RUNNER_TEMP/webhook-receiver-ca.pem" >> "$GITHUB_ENV"
           echo "GOFORMX_WEBHOOK_RECEIVER_CERT=$RUNNER_TEMP/webhook-receiver.pem" >> "$GITHUB_ENV"
           echo "GOFORMX_WEBHOOK_RECEIVER_KEY=$RUNNER_TEMP/webhook-receiver-key.pem" >> "$GITHUB_ENV"
+          echo "GOFORMX_WEBHOOK_RECEIVER_PID_FILE=$RUNNER_TEMP/webhook-receiver.pid" >> "$GITHUB_ENV"
 
       - name: Checkout the accepted Go data-plane boundary
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -123,18 +124,21 @@ jobs:
             -CAcreateserial -extfile "$RUNNER_TEMP/webhook-receiver.ext" \
             -out "$GOFORMX_WEBHOOK_RECEIVER_CERT" >/dev/null 2>&1
           echo '8.8.8.8 receiver.goformx.test' | sudo tee -a /etc/hosts >/dev/null
+          # A public-classified address is intentional: Go's production SSRF
+          # policy rejects loopback/private peers and revalidates on every dial.
           sudo ip address add 8.8.8.8/32 dev lo
+          : > "$GOFORMX_WEBHOOK_RECEIVER_PID_FILE"
           sudo env \
             GOFORMX_BROWSER_REHEARSAL=1 \
             GOFORMX_WEBHOOK_RECEIVER_HOST=8.8.8.8 \
             GOFORMX_WEBHOOK_VERIFIER="$GITHUB_WORKSPACE/.ci/goformx/goforms/.contract-client/examples/webhook-receiver.mjs" \
             GOFORMX_WEBHOOK_RECEIVER_CERT="$GOFORMX_WEBHOOK_RECEIVER_CERT" \
             GOFORMX_WEBHOOK_RECEIVER_KEY="$GOFORMX_WEBHOOK_RECEIVER_KEY" \
+            GOFORMX_WEBHOOK_RECEIVER_PID_FILE="$GOFORMX_WEBHOOK_RECEIVER_PID_FILE" \
             GOFORMX_WEBHOOK_CURRENT_SECRET="$GOFORMX_WEBHOOK_CURRENT_SECRET" \
             GOFORMX_WEBHOOK_PREVIOUS_SECRET="$GOFORMX_WEBHOOK_PREVIOUS_SECRET" \
             "$(command -v node)" tests/BrowserLive/fixtures/webhook-receiver.mjs \
             > "$GOFORMX_WEBHOOK_RECEIVER_LOG" 2>&1 &
-          echo "GOFORMX_WEBHOOK_RECEIVER_PID=$!" >> "$GITHUB_ENV"
           for attempt in $(seq 1 30); do
             if curl --fail --silent "$GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL/health" > /dev/null; then
               exit 0
@@ -264,8 +268,11 @@ jobs:
           if [[ -n "${GOFORMX_UI_PID:-}" ]]; then
             kill "$GOFORMX_UI_PID" 2>/dev/null || true
           fi
-          if [[ -n "${GOFORMX_WEBHOOK_RECEIVER_PID:-}" ]]; then
-            sudo kill "$GOFORMX_WEBHOOK_RECEIVER_PID" 2>/dev/null || true
+          if [[ -f "${GOFORMX_WEBHOOK_RECEIVER_PID_FILE:-}" ]]; then
+            receiver_pid="$(cat "$GOFORMX_WEBHOOK_RECEIVER_PID_FILE")"
+            if [[ "$receiver_pid" =~ ^[1-9][0-9]*$ ]]; then
+              sudo kill "$receiver_pid" 2>/dev/null || true
+            fi
           fi
           if [[ "${{ matrix.suite }}" == "integrations" ]]; then
             sudo ip address del 8.8.8.8/32 dev lo 2>/dev/null || true
