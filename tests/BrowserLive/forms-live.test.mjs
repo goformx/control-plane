@@ -120,6 +120,7 @@ test('real browser login → create → publish → integrations → submission,
   assert.deepEqual(submission.statuses, [202, 202]); assert.equal(submission.first.data.id, submission.second.data.id);
   const contextData = await owner.evaluate(async () => (await fetch('/api/control-plane/forms')).json());
   const owned = contextData.data.find(form => form.name === name); assert.ok(owned);
+  const organizationId = await owner.evaluate(async () => (await (await fetch('/api/control-plane/context')).json()).data.id);
   // Publishing a different policy must not reinterpret an already accepted row.
   const newer = parseJSON(stringify(revised));
   newer.properties.exactInteger.title = 'Newer integer label';
@@ -174,7 +175,6 @@ test('real browser login → create → publish → integrations → submission,
 
   // Run the integration lifecycle last so it cannot mask the pre-existing form
   // and tenancy assertions if a management operation regresses shared UI state.
-  const organizationId = await owner.evaluate(async () => (await (await fetch('/api/control-plane/context')).json()).data.id);
   const integrationName = `browser-token-${randomUUID()}`;
   await owner.getByRole('button', { name: 'Manage API access' }).click();
   await owner.getByText('No token metadata returned.', { exact: true }).waitFor();
