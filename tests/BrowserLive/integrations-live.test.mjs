@@ -133,7 +133,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   try { projectedBody = JSON.parse(projectedText); }
   catch { throw new Error('Projected webhook response was not valid JSON; body withheld.'); }
   assert.ok(projectedBody?.data && typeof projectedBody.data === 'object', 'Projected webhook response returned no data; body withheld.');
-  assert.deepEqual(Object.keys(projectedBody.data).sort(), ['enabled', 'formId', 'origin', 'updatedAt']);
+  assert.deepEqual(Object.keys(projectedBody.data).sort(), ['createdAt', 'enabled', 'formId', 'id', 'origin', 'updatedAt']);
   assert.ok(!JSON.stringify(projectedBody).includes('browser-live-original-signing-key-123456'), 'Projected webhook response exposed its signing secret.');
   assert.ok(!JSON.stringify(projectedBody).includes('X-Receiver-Fixture'), 'Projected webhook response exposed write-only headers.');
   page.once('dialog', dialog => dialog.accept());
