@@ -32,7 +32,6 @@ const proxy = createServer(async (request, response) => {
       redirect: 'manual', signal: AbortSignal.timeout(20000),
     });
     const upstreamBody = Buffer.from(await upstream.arrayBuffer());
-    state.forwarded++;
     if (armed && request.method === armed.method && new URL(request.url, upstreamOrigin).pathname === armed.path) {
       state.dropped++;
       state.lastDrop = { method: request.method, path: armed.path, upstreamStatus: upstream.status };
@@ -40,8 +39,9 @@ const proxy = createServer(async (request, response) => {
       response.destroy();
       return;
     }
+    state.forwarded++;
     const responseHeaders = {};
-    for (const name of ['content-type', 'cache-control', 'pragma', 'location', 'x-trace-id', 'retry-after']) {
+    for (const name of ['content-type', 'cache-control', 'pragma', 'location', 'etag', 'vary', 'x-trace-id', 'retry-after']) {
       const value = upstream.headers.get(name); if (value !== null) responseHeaders[name] = value;
     }
     if (!['HEAD'].includes(request.method) && ![204, 304].includes(upstream.status)) responseHeaders['content-length'] = String(upstreamBody.length);

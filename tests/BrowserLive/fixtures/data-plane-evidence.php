@@ -51,6 +51,8 @@ try {
         [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC],
     );
     $database->exec("SET default_transaction_read_only = on");
+    $database->beginTransaction();
+    $database->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ, READ ONLY');
 
     $stage = 'named-token-counts';
     $token = $database->prepare(<<<'SQL'
@@ -164,7 +166,7 @@ try {
         $audits->fetchAll(),
     );
 
-    fwrite(STDOUT, json_encode([
+    $output = json_encode([
         'activeTokenCount' => (int) $tokenCounts['active_count'],
         'revokedTokenCount' => (int) $tokenCounts['revoked_count'],
         'organizationActiveTokenCount' => (int) $organizationTokenCounts['active_count'],
@@ -175,8 +177,13 @@ try {
         'webhookEndpointCount' => (int) $endpointCount,
         'deliveries' => $deliveries,
         'events' => $events,
-    ], JSON_THROW_ON_ERROR));
+    ], JSON_THROW_ON_ERROR);
+    $database->commit();
+    fwrite(STDOUT, $output);
 } catch (Throwable $error) {
+    if (isset($database) && $database instanceof PDO && $database->inTransaction()) {
+        $database->rollBack();
+    }
     // Code location only: do not emit SQL, row data, credentials, or exception messages.
     fwrite(STDERR, json_encode([
         'stage' => $stage,

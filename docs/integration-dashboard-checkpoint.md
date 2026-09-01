@@ -51,8 +51,9 @@ being added in bounded, reviewable slices.
   next mutation. Its read-only PostgreSQL checks and log scans prove the webhook
   signing secret is absent from live encrypted configuration and the services'
   credential-adjacent logs. The full integration lifecycle separately proves
-  issued token plaintext and both webhook secrets are absent from durable
-  credential fields and service logs.
+  issued token plaintext is absent from the `service_tokens` credential columns,
+  both webhook secrets are absent from encrypted configuration, and all three
+  values are absent from service logs.
 
 ## Local verification
 
