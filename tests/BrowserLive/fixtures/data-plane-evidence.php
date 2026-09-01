@@ -52,6 +52,14 @@ try {
     $token->execute(['organization' => $organizationId, 'name' => $tokenName]);
     $tokenCounts = $token->fetch();
 
+    $organizationToken = $database->prepare(<<<'SQL'
+        SELECT count(*) FILTER (WHERE revoked_at IS NULL) AS active_count,
+               count(*) FILTER (WHERE revoked_at IS NOT NULL) AS revoked_count
+        FROM service_tokens WHERE organization_id = :organization
+        SQL);
+    $organizationToken->execute(['organization' => $organizationId]);
+    $organizationTokenCounts = $organizationToken->fetch();
+
     $stage = 'endpoint-count';
     $endpoint = $database->prepare('SELECT count(*) FROM webhook_endpoints WHERE form_id = :form');
     $endpoint->execute(['form' => $formId]);
@@ -100,6 +108,8 @@ try {
     fwrite(STDOUT, json_encode([
         'activeTokenCount' => (int) $tokenCounts['active_count'],
         'revokedTokenCount' => (int) $tokenCounts['revoked_count'],
+        'organizationActiveTokenCount' => (int) $organizationTokenCounts['active_count'],
+        'organizationRevokedTokenCount' => (int) $organizationTokenCounts['revoked_count'],
         'webhookEndpointCount' => (int) $endpointCount,
         'deliveries' => $deliveries,
         'events' => $events,
