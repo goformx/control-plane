@@ -24,6 +24,20 @@ Use the public integration example in the [forms workflow](forms-workflow.md)
 for browser submissions. The rest of this guide concerns external service
 tokens and webhook signing secrets.
 
+## Dashboard access policy
+
+Every integration operation—token inventory, issuance and revocation; webhook
+read, replacement, pause/resume, rotation and deletion; and delivery replay—is
+restricted to an active organization **owner or admin**. This is intentional:
+even read-only token and delivery metadata describes machine access or delivery
+operations, so ordinary members do not receive a partial integration view.
+Owner and admin use the same operation set; least privilege within the downstream
+call still comes from its exact signed scope. The server resolves account,
+organization and current membership again for every request. Browser-supplied
+organization or role values are ignored, foreign resources remain uniformly
+absent, and demotion or revocation denies the next request rather than waiting
+for the session to expire.
+
 ## Issue and rotate an external service token
 
 1. Sign in with a verified owner or admin account and choose **Manage API access**.
