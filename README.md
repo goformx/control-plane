@@ -4,6 +4,16 @@ The human-facing account and management application for [GoFormX](https://goform
 
 This repository owns browser sessions, accounts, organization membership, navigation, and human workflows. The Go service at `api.goformx.com` remains the source of truth for forms, schemas, publication, submissions, service tokens, and webhooks. This application never connects to the GoFormX data-plane database and never sends a privileged service credential to a browser.
 
+## Issue tracking
+
+Product work for this repository is tracked centrally with the data plane so
+cross-service dependencies, milestones, and release gates stay in one place.
+Use the [open control-plane issues](https://github.com/goformx/goformx/issues?q=is%3Aissue%20is%3Aopen%20label%3Acontrol-plane),
+[GoFormX roadmap](https://github.com/goformx/goformx/issues/84), and
+[MVP project](https://github.com/orgs/goformx/projects/1) to report or follow
+work. This repository's separate Issues feature is intentionally disabled; an
+empty local issue list does not mean the control plane is complete.
+
 ## Local development
 
 Requirements: PHP 8.5, Composer 2, SQLite, Sodium, and Node.js 22 for UI development and verification.
