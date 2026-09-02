@@ -96,8 +96,13 @@ test('network-uncertain mutations disable retries until reconciliation; refresh 
 });
 
 test('mobile layout, focus, unsaved navigation and session expiry', async t => {
-  const { page, data } = await fixture(t, { populated: true }); await page.setViewportSize({ width: 390, height: 844 }); await openForm(page);
+  const { page, data } = await fixture(t, { populated: true }); await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('heading', { name: 'Choose a form to continue' }).waitFor();
+  const actionWidths = await page.locator('.workspace-actions button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width));
+  assert.ok(actionWidths.every(width => width >= 140), 'workspace actions must remain usable at the narrow dashboard width');
+  await openForm(page);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  assert.equal(await page.getByRole('navigation', { name: 'Form tasks' }).getByRole('link', { name: 'Webhook' }).isVisible(), true);
   const content = page.getByRole('textbox', { name: 'JSON Schema editor' }); await content.focus(); await page.keyboard.press('Tab');
   assert.equal(await content.evaluate(el => el.contains(document.activeElement)), false, 'Tab must leave the code editor');
   await schemaText(page, '{"type":"object","properties":{"changed":{}}}');
