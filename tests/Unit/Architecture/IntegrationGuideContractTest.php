@@ -11,9 +11,15 @@ final class IntegrationGuideContractTest extends TestCase
     public function testOperatorGuideTracksTheRenderedControlsAndCanonicalContracts(): void
     {
         $root = dirname(__DIR__, 3);
-        $guide = (string) file_get_contents($root . '/docs/integrations-workflow.md');
-        $template = (string) file_get_contents($root . '/templates/app.html.twig');
-        $integrationUi = (string) file_get_contents($root . '/ui/integrations-app.js');
+        $guidePath = $root . '/docs/integrations-workflow.md';
+        $templatePath = $root . '/templates/app.html.twig';
+        $integrationUiPath = $root . '/ui/integrations-app.js';
+        self::assertFileExists($guidePath);
+        self::assertFileExists($templatePath);
+        self::assertFileExists($integrationUiPath);
+        $guide = (string) file_get_contents($guidePath);
+        $template = (string) file_get_contents($templatePath);
+        $integrationUi = (string) file_get_contents($integrationUiPath);
 
         foreach ([
             'Manage API access',

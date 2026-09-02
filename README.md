@@ -72,9 +72,9 @@ numeric boundary from GoFormX #144 and the initial integration lifecycle from
 The HTTP/custody, forms-browser, integrations-browser, live-authorization, and
 response-loss rehearsals use separate disposable environments, so their loopback
 traffic does not share the framework's persistent per-IP rate-limit budget. The
-response-loss leg proves durable reconciliation and plaintext credential
-non-retention after a committed mutation loses its response. Every matrix leg
-must pass the
+response-loss leg proves durable reconciliation, revocation of an unclaimed
+token, and webhook-secret plaintext non-retention after a committed mutation
+loses its response. Every matrix leg must pass the
 `authenticated-boundary` gate; production rate limits remain enabled and unchanged.
 Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,

@@ -37,9 +37,9 @@ tokens and webhook signing secrets.
 4. At **Save this token now**, move the `gfst_` value directly into the
    integration's secret manager. This is the only reveal. The dashboard clears
    it after two minutes, on dismissal, when the tab is hidden, or when the form
-   changes. Starting any subsequent integration action also clears it. Clipboard
-   managers and downloaded files may retain extra copies; remove copies that are
-   no longer needed.
+   changes. Starting another server-backed integration request also clears it.
+   Clipboard managers and downloaded files may retain extra copies; remove copies
+   that are no longer needed.
 5. Verify the integration using the canonical API/client guide. Token metadata
    shows an identifier, scopes, status, expiry, and last observed use; it can
    never recover the token value. The list is limited to 100 recent records and
@@ -104,8 +104,8 @@ assuming every error means the same thing:
   compare it with the intended change, then submit a reconciled update.
 - `503` is a definite no-op only when the dashboard identifies one of its exact
   recognized conditions: unavailable management audit, disabled webhook service,
-  or unavailable token service. Fix that service availability before retrying.
-  Treat any other `503` as uncertain.
+  or unavailable service-token management. Fix that service availability before
+  retrying. Treat any other `503` as uncertain.
 - A transport interruption, malformed response, timeout, or unclassified server
   failure may have happened after the mutation committed. The dashboard blocks
   further mutations but leaves token revocation and metadata reload available.
