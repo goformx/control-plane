@@ -80,6 +80,31 @@ final class IntegrationWorkflowTest extends TestCase
         foreach (IntegrationOperation::cases() as $operation) { foreach (OrganizationRole::cases() as $role) { yield $operation->value . '/' . $role->value => [$operation, $role]; } }
     }
 
+    #[DataProvider('operations')]
+    public function testMembershipRevocationDeniesTheVeryNextRequestForEveryOperation(IntegrationOperation $operation): void
+    {
+        $attempt = 0;
+        $resolver = $this->createMock(OrganizationRequestContextResolverInterface::class);
+        $resolver->expects(self::exactly(2))->method('resolve')->willReturnCallback(function () use (&$attempt): OrganizationRequestContext {
+            if ($attempt++ === 0) { return $this->context(OrganizationRole::Owner); }
+            throw new OrganizationAccessDenied('The organization membership is no longer active.');
+        });
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $client->expects(self::once())->method('request')->willReturn($this->upstream($operation));
+        $controller = new ManagementIntegrationsController($resolver, $client);
+
+        self::assertSame($this->upstream($operation)->statusCode,
+            $controller->handle($this->request($operation), $operation)->getStatusCode());
+        $denied = $controller->handle($this->request($operation), $operation);
+        self::assertSame(403, $denied->getStatusCode());
+        self::assertStringContainsString('no-store', $denied->headers->get('Cache-Control'));
+    }
+
+    public static function operations(): iterable
+    {
+        foreach (IntegrationOperation::cases() as $operation) { yield $operation->value => [$operation]; }
+    }
+
     #[DataProvider('mutations')]
     public function testCsrfDeniesEveryMutationBeforeMembershipOrIssuance(IntegrationOperation $operation): void
     {
