@@ -10,7 +10,8 @@ export function tokenRequest(name, scopes, days) {
 export function initIntegrations({ context, verifyWorkspace }) {
   const $ = id => document.getElementById(id);
   let generation = 0, controller = null, busy = false, mutationPending = false, uncertain = false;
-  let tokensOpen = false, webhook = null, webhookLoaded = false, revealed = '', revealTimer;
+  let tokensOpen = false, tokenCursor = '', tokenNextCursor = '', tokenPrevious = [];
+  let webhook = null, webhookLoaded = false, revealed = '', revealTimer;
   const urls = new Set();
   const allowed = () => ['owner', 'admin'].includes(context().role) && !context().sessionExpired;
   const message = value => { $('integration-message').textContent = value; };
@@ -25,11 +26,15 @@ export function initIntegrations({ context, verifyWorkspace }) {
     $('webhook-state').textContent = 'Load this form’s webhook to see its current state.';
     $('pause-webhook').textContent = 'Pause future deliveries';
   }
+  function clearTokenInventory() {
+    tokenCursor = ''; tokenNextCursor = ''; tokenPrevious = [];
+    $('token-list').replaceChildren(); $('token-page-state').textContent = '';
+  }
   function reset() {
     uncertain ||= mutationPending;
     generation++; controller?.abort(); controller = null; busy = false; mutationPending = false;
-    clearReveal(); clearWebhook();
-    $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren();
+    clearReveal(); clearWebhook(); clearTokenInventory();
+    $('webhook-deliveries').replaceChildren();
     $('webhook-settings').reset(); $('integration-error').hidden = true; $('integration-error').textContent = ''; message('');
     controls();
   }
@@ -39,6 +44,8 @@ export function initIntegrations({ context, verifyWorkspace }) {
     $('tokens-panel').hidden = !tokensOpen || !allowed();
     $('token-fields').disabled = locked || uncertain;
     $('reload-tokens').disabled = locked;
+    $('token-previous').disabled = locked || tokenPrevious.length === 0;
+    $('token-next').disabled = locked || !tokenNextCursor;
     $('webhook-panel').hidden = !context().form;
     $('webhook-access').hidden = allowed();
     $('webhook-fields').disabled = locked || uncertain;
@@ -48,7 +55,7 @@ export function initIntegrations({ context, verifyWorkspace }) {
     $('integration-uncertain').hidden = !uncertain;
     $('acknowledge-integration').disabled = locked;
     for (const id of ['token-list', 'webhook-deliveries']) for (const button of $(id).querySelectorAll('button')) button.disabled = locked || (id === 'webhook-deliveries' && uncertain);
-    if (!allowed()) { clearReveal(); clearWebhook(); $('token-list').replaceChildren(); $('webhook-deliveries').replaceChildren(); $('webhook-settings').reset(); }
+    if (!allowed()) { clearReveal(); clearWebhook(); clearTokenInventory(); $('webhook-deliveries').replaceChildren(); $('webhook-settings').reset(); }
   }
   async function request(path, { method = 'GET', body } = {}) {
     const headers = { Accept: 'application/json' };
@@ -108,9 +115,11 @@ export function initIntegrations({ context, verifyWorkspace }) {
   }
   function label(parent, text) { const paragraph = document.createElement('p'); paragraph.textContent = text; parent.append(paragraph); }
   async function loadTokens(active) {
-    const result = await request(tokenPath);
+    const result = await request(tokenPath + (tokenCursor ? `?cursor=${encodeURIComponent(tokenCursor)}` : ''));
     if (!active()) return;
-    if (!Array.isArray(result.data) || result.data.length > 100) throw new Error('Token metadata is unavailable.');
+    if (!Array.isArray(result.data) || result.data.length > 100 || result?.meta?.limit !== 100 ||
+      (result.meta.nextCursor !== null && (typeof result.meta.nextCursor !== 'string' || !/^[A-Za-z0-9_-]{1,1024}$/.test(result.meta.nextCursor)))) throw new Error('Token metadata is unavailable.');
+    tokenNextCursor = result.meta.nextCursor ?? '';
     $('token-list').replaceChildren();
     for (const token of result.data) {
       if (!/^[A-Za-z0-9_-]{16}$/.test(token.id) || token.organizationId !== context().organization || !Array.isArray(token.scopes)) throw new Error('Token metadata does not match this workspace.');
@@ -128,6 +137,7 @@ export function initIntegrations({ context, verifyWorkspace }) {
       $('token-list').append(row);
     }
     if (!result.data.length) label($('token-list'), 'No token metadata returned.');
+    $('token-page-state').textContent = `Page ${tokenPrevious.length + 1} · ${result.data.length} token records${tokenNextCursor ? ' · Older records available' : ' · End of inventory'}`;
   }
   async function loadWebhook(active) {
     let result;
@@ -159,8 +169,10 @@ export function initIntegrations({ context, verifyWorkspace }) {
     }
     if (!result.data.length) label($('webhook-deliveries'), 'No deliveries in this recent window.');
   }
-  $('manage-tokens').onclick = () => { tokensOpen = true; controls(); $('tokens-panel').scrollIntoView({ block: 'start' }); act(loadTokens); };
-  $('reload-tokens').onclick = () => act(loadTokens);
+  $('manage-tokens').onclick = () => { tokensOpen = true; clearTokenInventory(); controls(); $('tokens-panel').scrollIntoView({ block: 'start' }); act(loadTokens); };
+  $('reload-tokens').onclick = () => { clearTokenInventory(); act(loadTokens); };
+  $('token-next').onclick = () => { if (!tokenNextCursor) return; tokenPrevious.push(tokenCursor); tokenCursor = tokenNextCursor; tokenNextCursor = ''; act(loadTokens); };
+  $('token-previous').onclick = () => { if (!tokenPrevious.length) return; tokenCursor = tokenPrevious.pop() ?? ''; tokenNextCursor = ''; act(loadTokens); };
   $('token-create').onsubmit = event => {
     event.preventDefault(); if (uncertain || !$('token-create').reportValidity()) return;
     let body;

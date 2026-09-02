@@ -17,7 +17,14 @@ final class IntegrationResponse
         if (!is_array($data)) { throw new \UnexpectedValueException(); }
         if ($operation === IntegrationOperation::Tokens) {
             if (!array_is_list($data) || count($data) > 100) { throw new \UnexpectedValueException(); }
-            return ['data' => array_map(fn(array $token): array => self::token($token, $organization), $data), 'meta' => ['limit' => 100]];
+            $meta = $payload['meta'] ?? null;
+            $next = is_array($meta) ? ($meta['nextCursor'] ?? null) : null;
+            if (!is_array($meta) || !array_key_exists('nextCursor', $meta) || ($meta['limit'] ?? null) !== 100 ||
+                ($next !== null && (!is_string($next) || preg_match('/\A[A-Za-z0-9_-]{1,1024}\z/', $next) !== 1))) {
+                throw new \UnexpectedValueException();
+            }
+            return ['data' => array_map(fn(array $token): array => self::token($token, $organization), $data),
+                'meta' => ['limit' => 100, 'nextCursor' => $next]];
         }
         if ($operation === IntegrationOperation::CreateToken) {
             $token = $data['token'] ?? null;
