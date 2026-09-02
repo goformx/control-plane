@@ -53,12 +53,16 @@ test('complete token inventory can page past 100 records and revoke an older tok
     organizationId: ORG_ID, scopes: ['forms:read'], status: 'active',
     createdAt: '2026-08-30T00:00:00Z', expiresAt: '2027-08-30T00:00:00Z',
   }));
-  const requests = [];
+  const requests = []; let failFirstOlderPage = true;
   await page.route(/\/api\/control-plane\/service-tokens(?:\/[A-Za-z0-9_-]{16})?(?:\?.*)?$/, async route => {
     const request = route.request(); const url = new URL(request.url()); requests.push(`${request.method()} ${url.pathname}${url.search}`);
     if (request.method() === 'DELETE') {
       const id = url.pathname.split('/').pop(); const token = rows.find(row => row.id === id);
       assert.ok(token); token.status = 'revoked'; await route.fulfill({ status: 204, body: '' }); return;
+    }
+    if (url.searchParams.get('cursor') === 'page-100' && failFirstOlderPage) {
+      failFirstOlderPage = false;
+      await route.fulfill({ status: 503, json: { error: { code: 'service_unavailable' } } }); return;
     }
     const offset = url.searchParams.get('cursor') ? Number(url.searchParams.get('cursor').replace('page-', '')) : 0;
     await route.fulfill({ json: { data: rows.slice(offset, offset + 100), meta: {
@@ -68,6 +72,12 @@ test('complete token inventory can page past 100 records and revoke an older tok
   await page.getByRole('button', { name: 'Manage API access' }).click();
   await page.getByText('Page 1 · 100 token records · Older records available', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Older tokens' }).click();
+  await page.locator('#integration-error').waitFor();
+  assert.equal(await page.locator('#token-page-state').textContent(), 'Page 1 · 100 token records · Older records available');
+  assert.equal(await page.getByRole('button', { name: 'Newer tokens' }).isDisabled(), true);
+  assert.equal(await page.getByRole('button', { name: 'Older tokens' }).isEnabled(), true);
+  assert.equal(await page.getByText('inventory-000 · active', { exact: true }).count(), 1);
+  await page.getByRole('button', { name: 'Older tokens' }).click();
   await page.getByText('Page 2 · 100 token records · Older records available', { exact: true }).waitFor();
   await page.getByRole('button', { name: 'Older tokens' }).click();
   await page.getByText('Page 3 · 5 token records · End of inventory', { exact: true }).waitFor();
@@ -75,8 +85,9 @@ test('complete token inventory can page past 100 records and revoke an older tok
   await page.getByRole('button', { name: 'Revoke inventory-204', exact: true }).click();
   await page.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
   assert.equal(await page.getByRole('button', { name: 'Revoke inventory-204', exact: true }).count(), 0);
-  assert.deepEqual(requests.slice(0, 5), [
+  assert.deepEqual(requests.slice(0, 6), [
     'GET /api/control-plane/service-tokens',
+    'GET /api/control-plane/service-tokens?cursor=page-100',
     'GET /api/control-plane/service-tokens?cursor=page-100',
     'GET /api/control-plane/service-tokens?cursor=page-200',
     'DELETE /api/control-plane/service-tokens/0000000000000204',

@@ -69,7 +69,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: goformx/goformx
-          ref: 9444e56ac08972db747f387f847e40f02a3a7a38
+          ref: 19f006f37159ca31cc527dda7f74a3d815bd4da6
           path: .ci/goformx
 
       - name: Set up PHP

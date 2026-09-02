@@ -114,13 +114,15 @@ export function initIntegrations({ context, verifyWorkspace }) {
     }
   }
   function label(parent, text) { const paragraph = document.createElement('p'); paragraph.textContent = text; parent.append(paragraph); }
-  async function loadTokens(active) {
-    const result = await request(tokenPath + (tokenCursor ? `?cursor=${encodeURIComponent(tokenCursor)}` : ''));
+  async function loadTokens(active, requested = { cursor: tokenCursor, previous: tokenPrevious }) {
+    const cursor = requested.cursor;
+    const previous = [...requested.previous];
+    const result = await request(tokenPath + (cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''));
     if (!active()) return;
     if (!Array.isArray(result.data) || result.data.length > 100 || result?.meta?.limit !== 100 ||
       (result.meta.nextCursor !== null && (typeof result.meta.nextCursor !== 'string' || !/^[A-Za-z0-9_-]{1,1024}$/.test(result.meta.nextCursor)))) throw new Error('Token metadata is unavailable.');
-    tokenNextCursor = result.meta.nextCursor ?? '';
-    $('token-list').replaceChildren();
+    const nextCursor = result.meta.nextCursor ?? '';
+    const inventory = document.createDocumentFragment();
     for (const token of result.data) {
       if (!/^[A-Za-z0-9_-]{16}$/.test(token.id) || token.organizationId !== context().organization || !Array.isArray(token.scopes)) throw new Error('Token metadata does not match this workspace.');
       const row = document.createElement('article'); row.className = 'integration-record';
@@ -134,10 +136,14 @@ export function initIntegrations({ context, verifyWorkspace }) {
           if (!active()) return; await loadTokens(active); message('Token revoked. It cannot authenticate new API requests.');
         }); }; row.append(button);
       }
-      $('token-list').append(row);
+      inventory.append(row);
     }
-    if (!result.data.length) label($('token-list'), 'No token metadata returned.');
-    $('token-page-state').textContent = `Page ${tokenPrevious.length + 1} · ${result.data.length} token records${tokenNextCursor ? ' · Older records available' : ' · End of inventory'}`;
+    if (!result.data.length) label(inventory, 'No token metadata returned.');
+    tokenCursor = cursor;
+    tokenPrevious = previous;
+    tokenNextCursor = nextCursor;
+    $('token-list').replaceChildren(inventory);
+    $('token-page-state').textContent = `Page ${previous.length + 1} · ${result.data.length} token records${nextCursor ? ' · Older records available' : ' · End of inventory'}`;
   }
   async function loadWebhook(active) {
     let result;
@@ -171,8 +177,8 @@ export function initIntegrations({ context, verifyWorkspace }) {
   }
   $('manage-tokens').onclick = () => { tokensOpen = true; clearTokenInventory(); controls(); $('tokens-panel').scrollIntoView({ block: 'start' }); act(loadTokens); };
   $('reload-tokens').onclick = () => { clearTokenInventory(); act(loadTokens); };
-  $('token-next').onclick = () => { if (!tokenNextCursor) return; tokenPrevious.push(tokenCursor); tokenCursor = tokenNextCursor; tokenNextCursor = ''; act(loadTokens); };
-  $('token-previous').onclick = () => { if (!tokenPrevious.length) return; tokenCursor = tokenPrevious.pop() ?? ''; tokenNextCursor = ''; act(loadTokens); };
+  $('token-next').onclick = () => { if (!tokenNextCursor) return; act(active => loadTokens(active, { cursor: tokenNextCursor, previous: [...tokenPrevious, tokenCursor] })); };
+  $('token-previous').onclick = () => { if (!tokenPrevious.length) return; act(active => loadTokens(active, { cursor: tokenPrevious.at(-1) ?? '', previous: tokenPrevious.slice(0, -1) })); };
   $('token-create').onsubmit = event => {
     event.preventDefault(); if (uncertain || !$('token-create').reportValidity()) return;
     let body;
