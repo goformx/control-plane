@@ -26,7 +26,7 @@ final class FormsWorkflowGuideContractTest extends TestCase
             'Allowed browser origins',
             'Save details',
             'Copy JavaScript example',
-            'Review submissions',
+            'Load submissions',
             'Apply submission filters',
             'Exact accepted JSON Schema',
             'Export JSON',

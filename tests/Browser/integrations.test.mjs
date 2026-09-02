@@ -60,6 +60,7 @@ test('uncertain issuance blocks retry; refreshed membership blocks integration a
   } } }));
   await page.getByRole('button', { name: /Contact us/ }).click();
   await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await page.getByText('Paused for future submissions', { exact: false }).waitFor();
   assert.equal(await page.locator('#pause-webhook').textContent(), 'Resume future deliveries');
@@ -98,6 +99,7 @@ test('delivery-history assertion failure does not latch a valid workspace read-o
   }));
   await page.getByRole('button', { name: /Contact us/ }).click();
   await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load delivery history' }).click();
   await page.getByText('Data-plane authentication is unavailable.', { exact: false }).waitFor();
   await page.getByRole('button', { name: 'Refresh', exact: true }).click();
@@ -140,6 +142,7 @@ test('definite mutation rejections do not require uncertain-outcome acknowledgem
   });
   await page.getByRole('button', { name: /Contact us/ }).click();
   await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await page.getByText('No webhook endpoint is configured', { exact: false }).waitFor();
   await page.locator('#webhook-url').fill('https://receiver.example/hook');
@@ -172,6 +175,7 @@ test('webhook pause and rotation send narrow JSON patches with explicit snapshot
   });
   await page.getByRole('button', { name: /Contact us/ }).click();
   await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Pause future deliveries' }).click();
   await page.getByText('Future delivery setting updated.', { exact: false }).waitFor();

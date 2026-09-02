@@ -19,6 +19,7 @@ async function fixture(t, { role = 'owner', rows = [row()] } = {}) {
   await page.goto(server.url + '/app');
   await page.getByRole('button', { name: /Contact us/ }).click();
   await page.getByText('Viewing saved version 1', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Submissions', exact: true }).click();
   return { page, data: server.data, url: server.url };
 }
 
@@ -26,7 +27,7 @@ test('submission detail uses accepted schema, safe text, precise values and memo
   const { page, url, data } = await fixture(t);
   data.deliveries = [{ id: '55555555-5555-4555-8555-555555555555', submissionId: row().id,
     status: 'delivered', attemptCount: 2, updatedAt: '2026-08-30T12:40:00Z', deliveredAt: '2026-08-30T12:40:00Z', lastHttpStatus: 204 }];
-  await page.getByRole('button', { name: 'Review submissions', exact: true }).click();
+  await page.getByRole('button', { name: 'Load submissions', exact: true }).click();
   await page.locator('#submission-list button').first().click();
   await page.getByRole('heading', { name: 'Submission detail', exact: true }).waitFor();
   assert.match(await page.locator('#submission-values').textContent(), /Accepted amount/);
