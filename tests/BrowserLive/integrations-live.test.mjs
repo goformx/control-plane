@@ -111,11 +111,11 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
     throw new Error(`Timed out waiting for ${description}; receiver bodies, signatures, and credentials withheld.`);
   }
   async function deliveryHistory() {
-    return page.evaluate(async formId => {
-      const response = await fetch(`/api/control-plane/forms/${encodeURIComponent(formId)}/deliveries`, { cache: 'no-store' });
-      if (!response.ok) throw new Error(`Delivery history returned HTTP ${response.status}; body withheld.`);
-      return (await response.json()).data;
-    }, owned.id);
+    // Poll durable state through the rehearsal's read-only PostgreSQL evidence
+    // channel. Management API requests are deliberately reserved for the
+    // browser actions whose boundary behavior this test is proving.
+    return dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName,
+      tokenPlaintext: externalToken, webhookSecrets: [previousSecret, currentSecret] }).deliveries;
   }
   async function submit(endpoint, label) {
     return page.evaluate(async ({ endpoint, key, label }) => {
