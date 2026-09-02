@@ -8,7 +8,8 @@ import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, pa
 
 const $ = id => document.getElementById(id);
 const text = (id, value) => { $(id).textContent = value; };
-const state = { organization: null, role: null, form: null, version: null, versions: [], totalVersions: 0, offset: 0, total: 0, busy: false, uncertain: false, sessionExpired: false, schemaBaseline: '', metadataBaseline: '' };
+const state = { organization: null, role: null, form: null, version: null, versions: [], totalVersions: 0, offset: 0, total: 0, busy: false, uncertain: false, sessionExpired: false, activeTask: 'build', schemaBaseline: '', metadataBaseline: '' };
+const formTasks = ['build', 'publish', 'connect', 'submissions', 'webhook'];
 const writable = () => ['owner', 'admin'].includes(state.role) && !state.sessionExpired;
 const editable = new Compartment();
 let previewTimer;
@@ -74,8 +75,6 @@ async function act(work) {
 function controls() {
   submissions.controls();
   integrations.controls();
-  $('review-submissions').hidden = !state.form;
-  $('review-submissions').disabled = !writable() || state.busy;
   const canWrite = writable() && !state.busy && !state.uncertain;
   $('new-form').disabled = !canWrite;
   $('metadata-fields').disabled = !canWrite;
@@ -98,6 +97,7 @@ function controls() {
   text('dirty', dirty() ? 'Unsaved changes — kept in this tab only' : '');
   editor.dispatch({ effects: editable.reconfigure(EditorState.readOnly.of(!canWrite)) });
   for (const button of $('forms-list').querySelectorAll('button')) button.disabled = state.busy;
+  renderTasks();
 }
 function confirmDiscard() { return !dirty() || window.confirm('Discard unsaved edits? Download or copy your schema first if you need to keep it.'); }
 function setSchema(schema) {
@@ -116,6 +116,21 @@ function metadata() {
   return { title: $('form-title').value, description: $('form-description').value, allowedOrigins: parseOrigins($('form-origins').value) };
 }
 function reveal() { $('welcome').hidden = true; $('editor-panel').hidden = false; $('editor-heading').focus(); }
+function renderTasks() {
+  if (!state.form && state.activeTask !== 'build') state.activeTask = 'build';
+  for (const task of formTasks) {
+    $(`task-${task}`).hidden = state.activeTask !== task;
+    const button = document.querySelector(`[data-form-task="${task}"]`);
+    button.setAttribute('aria-current', String(state.activeTask === task));
+    button.disabled = state.busy || (!state.form && task !== 'build');
+  }
+}
+function selectTask(task) {
+  if (!formTasks.includes(task) || (!state.form && task !== 'build')) return;
+  state.activeTask = task;
+  renderTasks();
+  $(`task-${task}`).scrollIntoView({ block: 'start' });
+}
 function renderPreview() {
   const container = $('preview'); container.replaceChildren();
   let schema;
@@ -179,7 +194,7 @@ function renderPublication() {
   text('integration-example', live ? integrationExample(publicOrigin, state.form.publicKey, state.form.currentVersion) : '// Integration example becomes available after explicit publication.');
   $('copy-example').disabled = !live;
 }
-async function openForm(id) {
+async function openForm(id, task = 'build') {
   submissions.reset();
   integrations.reset();
   const path = `/api/control-plane/forms/${encodeURIComponent(id)}`;
@@ -190,7 +205,7 @@ async function openForm(id) {
   if (!versions.data.length) throw new Error('No schema versions returned. Reload before editing.');
   const number = Math.max(...versions.data.map(version => version.version));
   const selected = await api(`${path}/versions/${number}`);
-  state.form = { ...result.data, etag: result.etag }; state.version = selected.data;
+  state.form = { ...result.data, etag: result.etag }; state.version = selected.data; state.activeTask = task;
   state.versions = versions.data; state.totalVersions = versions.meta.total;
   state.uncertain = false; fillMetadata(state.form); setSchema(state.version.schema);
   text('editor-heading', state.form.title); text('save-schema', 'Validate & save new draft');
@@ -204,6 +219,7 @@ async function openForm(id) {
 function newForm() {
   submissions.reset();
   integrations.reset();
+  state.activeTask = 'build';
   state.form = null; state.version = null; state.versions = []; state.uncertain = false;
   fillMetadata({ allowedOrigins: [] }); setSchema(starterSchema());
   text('editor-heading', 'New form'); text('form-status', 'NOT SAVED'); text('save-schema', 'Validate & create form');
@@ -241,11 +257,11 @@ async function saveMetadata() {
 }
 
 $('new-form').onclick = () => { if (confirmDiscard()) { clearError(); newForm(); } };
-$('review-submissions').onclick = () => submissions.open();
+for (const button of document.querySelectorAll('[data-form-task]')) button.onclick = () => selectTask(button.dataset.formTask);
 $('refresh').onclick = () => act(async () => { await verifyWorkspace(); await listForms(); });
 $('previous').onclick = () => act(async () => { state.offset -= PAGE_SIZE; await listForms(); });
 $('next').onclick = () => act(async () => { state.offset += PAGE_SIZE; await listForms(); });
-$('reload-form').onclick = () => { if (confirmDiscard()) act(() => openForm(state.form.id)); };
+$('reload-form').onclick = () => { if (confirmDiscard()) act(() => openForm(state.form.id, state.activeTask)); };
 $('versions').onchange = event => { const number = Number(event.target.value); if (confirmDiscard()) act(() => selectVersion(number)); else event.target.value = state.version.version; };
 $('more-versions').onclick = () => act(() => loadVersions(true));
 $('metadata-form').onsubmit = event => { event.preventDefault(); if (state.form) act(saveMetadata); else act(saveSchema); };
@@ -260,7 +276,7 @@ $('confirm-publish').onclick = () => act(async () => {
   await verifyWorkspace(); const number = state.version.version;
   const result = await api(`${formPath()}/versions/${number}/publish`, { method: 'POST' });
   state.version = result.data; state.form.status = 'published'; state.form.currentVersion = number;
-  $('publish-dialog').close(); await openForm(state.form.id); await selectVersion(number);
+  $('publish-dialog').close(); await openForm(state.form.id, 'publish'); await selectVersion(number);
   text('notice', `Version ${number} published. Integration example now targets the live version.`);
 });
 $('copy-example').onclick = () => act(async () => { await navigator.clipboard.writeText($('integration-example').textContent); text('notice', 'Public integration example copied. Replace the data with your schema fields.'); });

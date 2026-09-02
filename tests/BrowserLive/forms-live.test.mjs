@@ -87,9 +87,11 @@ test('real browser login → create → version → publish → public submissio
   assert.deepEqual(JSON.parse(readback).properties.__proto__, { type: 'string' }, 'Special property names survive the real editor → PHP → Go → readback path');
   assert.match(readback, /"minimum":\s*9007199254740993/, 'Saved integer constraint must not be rounded');
   assert.match(readback, /"minimum":\s*0\.1234567890123456789/, 'Saved decimal constraint must not be rounded');
+  await owner.getByRole('button', { name: 'Publish', exact: true }).click();
   await owner.getByRole('button', { name: 'Review publication' }).click();
   await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
   await owner.getByText('Version 2 published.', { exact: false }).waitFor();
+  await owner.getByRole('button', { name: 'Connect', exact: true }).click();
   const endpoint = await owner.getByLabel('Submission endpoint').inputValue();
   assert.match(endpoint, /^http:\/\/127\.0\.0\.1:18090\/v1\/public\/forms\/gfpk_[A-Za-z0-9_-]+\/submissions$/);
   const submission = await owner.evaluate(async ({ endpoint, key }) => {
@@ -113,12 +115,15 @@ test('real browser login → create → version → publish → public submissio
   const newer = parseJSON(stringify(revised));
   newer.properties.exactInteger.title = 'Newer integer label';
   newer['x-goformx-sensitive'] = ['/email', '/message', '/exactInteger'];
+  await owner.getByRole('button', { name: 'Build', exact: true }).click();
   await schema.fill(stringify(newer));
   await owner.getByRole('button', { name: 'Validate & save new draft' }).click();
   await owner.getByText('Saved draft version 3.', { exact: false }).waitFor();
+  await owner.getByRole('button', { name: 'Publish', exact: true }).click();
   await owner.getByRole('button', { name: 'Review publication' }).click();
   await owner.getByRole('button', { name: 'Publish version', exact: true }).click();
   await owner.getByText('Version 3 published.', { exact: false }).waitFor();
+  await owner.getByRole('button', { name: 'Submissions', exact: true }).click();
   await owner.getByRole('button', { name: 'Load submissions', exact: true }).click();
   await owner.getByText('1 submission · page 1', { exact: true }).waitFor();
   await owner.locator('#submission-list button').first().click();

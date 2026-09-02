@@ -45,6 +45,7 @@ test('rendered create, guided field, save, immutable versions, explicit publicat
   await page.getByRole('button', { name: 'Validate & save new draft' }).click();
   await page.getByText('Saved draft version 2.', { exact: false }).waitFor();
   assert.deepEqual(data.versions[0].schema, original); assert.equal(data.forms[0].status, 'draft');
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await page.getByRole('button', { name: 'Review publication' }).click();
   assert.equal(data.requests.filter(r => r.path.endsWith('/publish')).length, 0);
   await page.getByRole('button', { name: 'Cancel', exact: true }).click();
@@ -52,6 +53,7 @@ test('rendered create, guided field, save, immutable versions, explicit publicat
   await page.getByRole('button', { name: 'Publish version', exact: true }).click();
   await page.getByText('Version 2 published.', { exact: false }).waitFor();
   assert.equal(data.forms[0].currentVersion, 2);
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
   assert.match(await page.locator('#integration-example').textContent(), /"X-GoFormX-Schema-Version": "2"/);
   assert.equal(await page.locator('#submission-endpoint').inputValue(), 'https://api.goformx.com/v1/public/forms/gfpk_example/submissions');
   assert.ok(data.requests.filter(r => r.method !== 'GET').every(r => r.headers['x-xsrf-token'] === 'test-csrf' && !r.headers.authorization));
@@ -66,7 +68,22 @@ test('schema errors retain text and render untrusted messages safely', async t =
   await page.getByText('/schema/properties/payload: <script>alert(1)</script>', { exact: true }).waitFor();
   assert.equal(await page.getByRole('textbox', { name: 'JSON Schema editor' }).innerText(), source);
   assert.equal(await page.locator('#error script, #preview img').count(), 0);
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   assert.equal(await page.getByRole('button', { name: 'Review publication' }).isDisabled(), true);
+});
+
+test('form tasks disclose one workflow at a time and survive an explicit reload', async t => {
+  const { page } = await fixture(t, { populated: true }); await openForm(page);
+  assert.equal(await page.locator('#task-build').isVisible(), true);
+  assert.equal(await page.locator('#task-publish').isHidden(), true);
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
+  assert.equal(await page.locator('#task-build').isHidden(), true);
+  assert.equal(await page.locator('#integration').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect', exact: true }).getAttribute('aria-current'), 'true');
+  await page.getByRole('button', { name: 'Reload server version', exact: true }).click();
+  await page.waitForFunction(() => !document.getElementById('reload-form').disabled);
+  assert.equal(await page.locator('#integration').isVisible(), true);
+  assert.equal(await page.getByRole('button', { name: 'Connect', exact: true }).getAttribute('aria-current'), 'true');
 });
 
 test('ETag conflict preserves details and draft; read-only roles cannot mutate', async t => {
@@ -96,8 +113,15 @@ test('network-uncertain mutations disable retries until reconciliation; refresh 
 });
 
 test('mobile layout, focus, unsaved navigation and session expiry', async t => {
-  const { page, data } = await fixture(t, { populated: true }); await page.setViewportSize({ width: 390, height: 844 }); await openForm(page);
+  const { page, data } = await fixture(t, { populated: true }); await page.setViewportSize({ width: 390, height: 844 });
+  await page.getByRole('heading', { name: 'Choose a form to continue' }).waitFor();
+  const actionWidths = await page.locator('.workspace-actions button').evaluateAll(buttons => buttons.map(button => button.getBoundingClientRect().width));
+  assert.ok(actionWidths.every(width => width >= 140), 'workspace actions must remain usable at the narrow dashboard width');
+  await openForm(page);
   assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+  const taskNavigation = page.getByRole('navigation', { name: 'Form tasks' });
+  assert.equal(await taskNavigation.getByRole('button', { name: 'Webhook' }).isVisible(), true);
+  assert.equal(await taskNavigation.getByRole('button', { name: 'Build' }).getAttribute('aria-current'), 'true');
   const content = page.getByRole('textbox', { name: 'JSON Schema editor' }); await content.focus(); await page.keyboard.press('Tab');
   assert.equal(await content.evaluate(el => el.contains(document.activeElement)), false, 'Tab must leave the code editor');
   await schemaText(page, '{"type":"object","properties":{"changed":{}}}');
