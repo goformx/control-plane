@@ -26,6 +26,7 @@ final class IntegrationGuideContractTest extends TestCase
             'Create scoped token',
             'Save this token now',
             'Reload token metadata',
+            'Older tokens',
             'I have reconciled the change',
             'Load webhook',
             'Enable future deliveries when saving configuration',

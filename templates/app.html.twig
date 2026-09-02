@@ -35,7 +35,9 @@
       <label>New external service token<input id="issued-token" readonly autocomplete="off" spellcheck="false"></label>
       <div class="actions"><button id="copy-token" type="button">Copy token</button><button id="download-token" type="button">Download secret file</button><button id="dismiss-token" type="button">Dismiss token</button></div>
     </section>
-    <p class="help">At most 100 recent tokens are shown, not a complete historical inventory. “Not recorded” does not prove a token has never been used. Reload metadata after saving a new token.</p><div id="token-list"></div>
+    <p class="help">Token metadata is shown in pages of up to 100. Follow every page for a complete inventory. “Not recorded” does not prove a token has never been used. Reload metadata after saving a new token.</p>
+    <p id="token-page-state" class="help" role="status"></p><div id="token-list"></div>
+    <div class="actions"><button id="token-previous" type="button" disabled>Newer tokens</button><button id="token-next" type="button" disabled>Older tokens</button></div>
   </section>
   <div class="layout">
     <aside aria-labelledby="forms-heading"><div class="section-heading"><div><p class="eyebrow">CONTENT</p><h2 id="forms-heading">Your forms</h2></div><button id="refresh" class="quiet" type="button">Refresh</button></div>

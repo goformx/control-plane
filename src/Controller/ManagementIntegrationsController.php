@@ -33,9 +33,15 @@ final readonly class ManagementIntegrationsController
             $form = (string) $request->attributes->get('formId', '');
             $delivery = (string) $request->attributes->get('deliveryId', '');
             $path = $operation->path($form, (string) $request->attributes->get('tokenId', ''), $delivery);
-            // Token inventory is explicitly bounded. No arbitrary query is proxied.
-            if ($operation === IntegrationOperation::Tokens) { $path .= '?limit=100'; }
-            if ((string) $request->server->get('QUERY_STRING', '') !== '') { return $this->error(400); }
+            // Token inventory is explicitly bounded. Only Go's opaque cursor is proxied;
+            // the browser cannot select a limit or add arbitrary query parameters.
+            $query = (string) $request->server->get('QUERY_STRING', '');
+            if ($operation === IntegrationOperation::Tokens) {
+                if ($query === '') { $path .= '?limit=100';
+                } elseif (strlen($query) <= 1031 && preg_match('/\Acursor=([A-Za-z0-9_-]{1,1024})\z/', $query, $matches) === 1) {
+                    $path .= '?limit=100&cursor=' . $matches[1];
+                } else { return $this->error(400); }
+            } elseif ($query !== '') { return $this->error(400); }
             $body = null;
             if ($operation->hasBody()) {
                 if (strtolower(trim(explode(';', $request->headers->get('Content-Type', ''))[0])) !== 'application/json') { return $this->error(415); }

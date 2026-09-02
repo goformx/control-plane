@@ -118,6 +118,39 @@ final class IntegrationWorkflowTest extends TestCase
         foreach ([200, 403, 200] as $status) { self::assertSame($status, $controller->handle($this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens)->getStatusCode()); }
     }
 
+    public function testTokenInventoryProxiesOnlyOneBoundedOpaqueCursor(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $client->expects(self::once())->method('request')->with('GET', '/v1/service-tokens?limit=100&cursor=page-100',
+            self::SUBJECT, self::ORGANIZATION, [ManagementScope::TokensRead], null)->willReturn($this->upstream(IntegrationOperation::Tokens));
+        $controller = new ManagementIntegrationsController($resolver, $client);
+        $request = $this->request(IntegrationOperation::Tokens);
+        $request->server->set('QUERY_STRING', 'cursor=page-100');
+        self::assertSame(200, $controller->handle($request, IntegrationOperation::Tokens)->getStatusCode());
+
+        foreach (['limit=1', 'cursor=', 'cursor=one&cursor=two', 'cursor=one&extra=two', 'cursor=' . str_repeat('a', 1025)] as $query) {
+            $request = $this->request(IntegrationOperation::Tokens); $request->server->set('QUERY_STRING', $query);
+            self::assertSame(400, $controller->handle($request, IntegrationOperation::Tokens)->getStatusCode(), $query);
+        }
+    }
+
+    public function testTokenInventoryRejectsMalformedPaginationMetadata(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        foreach ([[], ['limit' => 25, 'nextCursor' => null], ['limit' => 100, 'nextCursor' => ''],
+            ['limit' => 100, 'nextCursor' => str_repeat('a', 1025)], ['limit' => 100, 'nextCursor' => 'not+a+cursor']] as $meta) {
+            $client = $this->createStub(ManagementApiClientInterface::class);
+            $client->method('request')->willReturn(new HttpResponse(200,
+                json_encode(['data' => [$this->token()], 'meta' => $meta]), ['content-type' => 'application/json']));
+            $response = (new ManagementIntegrationsController($resolver, $client))->handle(
+                $this->request(IntegrationOperation::Tokens), IntegrationOperation::Tokens);
+            self::assertSame(502, $response->getStatusCode(), json_encode($meta));
+        }
+    }
+
     public function testErrorsAndMalformedSuccessCannotRevealSecretsOrMasqueradeAsInvalidInput(): void
     {
         $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class); $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
@@ -174,7 +207,7 @@ final class IntegrationWorkflowTest extends TestCase
         $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
         $client = $this->createMock(ManagementApiClientInterface::class);
         $client->expects(self::exactly(3))->method('request')->willReturnOnConsecutiveCalls(
-            new HttpResponse(200, json_encode(['data' => [$this->token()]]), [
+            new HttpResponse(200, json_encode(['data' => [$this->token()], 'meta' => ['limit' => 100, 'nextCursor' => null]]), [
                 'content-type' => 'application/json', 'x-trace-id' => $trace, 'retry-after' => 'private-canary',
             ]),
             new HttpResponse(429, '{"error":{"code":"rate_limited"}}', [
@@ -234,6 +267,8 @@ final class IntegrationWorkflowTest extends TestCase
             default => ['id' => self::DELIVERY, 'formId' => self::FORM, 'origin' => 'https://example.com', 'enabled' => true, 'createdAt' => '2026-08-30T00:00:00Z', 'updatedAt' => '2026-08-30T00:00:00Z', 'signingSecret' => 'server-secret-canary'],
         };
         $status = match ($operation) { IntegrationOperation::CreateToken => 201, IntegrationOperation::ReplayDelivery => 202, IntegrationOperation::RevokeToken, IntegrationOperation::DeleteWebhook => 204, default => 200 };
-        return new HttpResponse($status, json_encode(['data' => $data, 'debug' => 'server-secret-canary']), ['content-type' => 'application/json', 'authorization' => 'server-secret-canary', 'set-cookie' => 'server-secret-canary']);
+        $payload = ['data' => $data, 'debug' => 'server-secret-canary'];
+        if ($operation === IntegrationOperation::Tokens) { $payload['meta'] = ['limit' => 100, 'nextCursor' => null]; }
+        return new HttpResponse($status, json_encode($payload), ['content-type' => 'application/json', 'authorization' => 'server-secret-canary', 'set-cookie' => 'server-secret-canary']);
     }
 }

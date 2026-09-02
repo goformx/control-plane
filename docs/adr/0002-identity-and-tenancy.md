@@ -102,6 +102,14 @@ the authority for token validation, persistence, audit, expiry and revocation.
 can mint/revoke tokens within their own authority. Admins share this integration
 authority with owners; this does not grant application membership administration.
 
+Token inventory reads use the data plane's bounded opaque cursor with a fixed
+100-record page size. PHP accepts no browser-selected limit or arbitrary query
+parameter and projects only validated `limit`/`nextCursor` metadata. The UI keeps
+its current and previous cursors only in memory, clears them with other integration
+state, and lets an owner/admin reach and revoke records beyond the first page.
+Following every page is required for a complete inventory; refresh begins a new
+walk from the newest records.
+
 The sole browser credential exception is the freshly created external token from
 that explicit creation request. A typed projection validates its format, lookup
 ID, organization and active metadata. Only this operation can return a `token`
