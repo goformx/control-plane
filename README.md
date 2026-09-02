@@ -30,6 +30,9 @@ optional. Preview does not validate schemas or fetch references. Go remains the
 validation authority. Form details and schema drafts save independently.
 See the [forms workflow](docs/forms-workflow.md) for creation, publication,
 AI/API integration, and recovery from conflicts or uncertain responses.
+Owners and admins can follow the [integration operations workflow](docs/integrations-workflow.md)
+for scoped token custody and rotation, signed webhook operation, replay safety,
+and mutation reconciliation.
 
 Each saved form also has a submissions browser for owners/admins. It supports
 cursor pagination, received-time/status/schema-version filters, exact accepted
@@ -66,9 +69,12 @@ a PostgreSQL-backed webhook and independently checks the resulting management
 audit identifiers and terminal rows. This guards the end-to-end
 numeric boundary from GoFormX #144 and the initial integration lifecycle from
 #168; browser-only fixture tests cannot detect a broken data plane.
-The HTTP/custody, forms-browser, and integrations-browser rehearsals use separate
-disposable environments, so their loopback traffic does not share the framework's
-persistent per-IP rate-limit budget. Every matrix leg must pass the
+The HTTP/custody, forms-browser, integrations-browser, live-authorization, and
+response-loss rehearsals use separate disposable environments, so their loopback
+traffic does not share the framework's persistent per-IP rate-limit budget. The
+response-loss leg proves durable reconciliation, revocation of an unclaimed
+token, and webhook-secret plaintext non-retention after a committed mutation
+loses its response. Every matrix leg must pass the
 `authenticated-boundary` gate; production rate limits remain enabled and unchanged.
 Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,
@@ -81,6 +87,8 @@ Open `/register` to create an account. Registration starts an authenticated but 
 - [Control plane and data plane](docs/adr/0001-control-plane-data-plane.md)
 - [Identity and tenancy](docs/adr/0002-identity-and-tenancy.md)
 - [Retired prototype paths](docs/adr/0003-retired-prototypes.md)
+- [Forms workflow](docs/forms-workflow.md)
+- [Integration operations workflow](docs/integrations-workflow.md)
 - [Development and deployment](docs/development.md)
 
 The canonical product capability declaration is [.waaseyaa/site.yaml](.waaseyaa/site.yaml). The provider-neutral release gate is `composer check`; GitHub Actions is only an adapter for that command.
