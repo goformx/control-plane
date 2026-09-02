@@ -7,6 +7,7 @@ namespace App\Tests\Unit\Http;
 use App\Controller\ManagementIntegrationsController;
 use App\Domain\GoFormX\IntegrationOperation;
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\RequestMediaType;
 use App\Domain\Organization\AuthenticatedAccount;
 use App\Domain\Organization\OrganizationAccessDenied;
 use App\Domain\Organization\OrganizationContext;
@@ -50,7 +51,8 @@ final class IntegrationWorkflowTest extends TestCase
             $scopes = $operation === IntegrationOperation::CreateToken ? [$expectedScope, ManagementScope::FormsRead] : [$expectedScope];
             $client->expects(self::once())->method('request')->with($operation->method(),
                 $operation->path(self::FORM, $this->token()['id'], self::DELIVERY) . ($operation === IntegrationOperation::Tokens ? '?limit=100' : ''),
-                self::SUBJECT, self::ORGANIZATION, $scopes, $operation->hasBody() ? $this->body($operation) : null)
+                self::SUBJECT, self::ORGANIZATION, $scopes, $operation->hasBody() ? $this->body($operation) : null,
+                null, null, RequestMediaType::Json)
                 ->willReturn($this->upstream($operation));
         } else { $client->expects(self::never())->method('request'); }
         $controller = new ManagementIntegrationsController($resolver, $client);

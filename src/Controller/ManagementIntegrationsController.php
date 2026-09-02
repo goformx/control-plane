@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Controller;
 
 use App\Domain\GoFormX\IntegrationOperation;
+use App\Domain\GoFormX\RequestMediaType;
 use App\Domain\Organization\OrganizationAccessDenied;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
 use App\Http\IntegrationResponse;
@@ -44,7 +45,7 @@ final readonly class ManagementIntegrationsController
             }
             $scopes = $operation->scopes($body);
             $downstream = $this->client->request($operation->method(), $path, $context->account->subjectId,
-                $context->organization->organizationId, $scopes, $body);
+                $context->organization->organizationId, $scopes, $body, mediaType: RequestMediaType::Json);
             if (strlen($downstream->body) > 262144) { throw new \UnexpectedValueException(); }
             $headers = array_change_key_case($downstream->headers, CASE_LOWER);
             if ($downstream->statusCode >= 400) {

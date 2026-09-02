@@ -7,6 +7,7 @@ namespace App\Tests\Unit\Http;
 use App\Controller\ManagementFormsController;
 use App\Domain\GoFormX\FormOperation;
 use App\Domain\GoFormX\ManagementScope;
+use App\Domain\GoFormX\RequestMediaType;
 use App\Domain\Organization\AuthenticatedAccount;
 use App\Domain\Organization\OrganizationContext;
 use App\Domain\Organization\OrganizationRequestContext;
@@ -44,6 +45,7 @@ final class FormWorkflowTest extends TestCase
                 $method, $path, self::SUBJECT, self::ORGANIZATION, [$scope],
                 $operation->hasBody() ? self::BODY : null,
                 null, $operation === FormOperation::Update ? self::ETAG : null,
+                $operation === FormOperation::Update ? RequestMediaType::MergePatch : RequestMediaType::Json,
             )->willReturn(new HttpResponse(200, '{"data":{}}', ['ETag' => self::ETAG, 'Authorization' => 'server-secret']));
         } else {
             $client->expects(self::never())->method('request');
