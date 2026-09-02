@@ -104,7 +104,9 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
     while (Date.now() < deadline) {
       const value = await predicate();
       if (value) return value;
-      await new Promise(resolve => setTimeout(resolve, 250));
+      // Keep this full lifecycle below the real global API rate budget. The
+      // delivery projection is durable; sub-second hammering adds no coverage.
+      await new Promise(resolve => setTimeout(resolve, 750));
     }
     throw new Error(`Timed out waiting for ${description}; receiver bodies, signatures, and credentials withheld.`);
   }
