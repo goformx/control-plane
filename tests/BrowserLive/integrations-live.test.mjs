@@ -124,9 +124,11 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   await page.getByRole('textbox', { name: 'Allowed browser origins' }).fill(uiUrl);
   await page.getByRole('button', { name: 'Validate & create form' }).click();
   await page.getByText('Form created as a draft.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Publish', exact: true }).click();
   await page.getByRole('button', { name: 'Review publication' }).click();
   await page.getByRole('button', { name: 'Publish version', exact: true }).click();
   await page.getByText('Version 1 published.', { exact: false }).waitFor();
+  await page.getByRole('button', { name: 'Connect', exact: true }).click();
   const submissionEndpoint = await page.getByLabel('Submission endpoint').inputValue();
   assert.match(submissionEndpoint, /^http:\/\/127\.0\.0\.1:18090\/v1\/public\/forms\/gfpk_[A-Za-z0-9_-]+\/submissions$/);
   const forms = await page.evaluate(async () => (await (await fetch('/api/control-plane/forms')).json()).data);
@@ -166,6 +168,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   assert.equal(afterRevoke.status, 401);
   await afterRevoke.text();
 
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await waitForIntegration('No webhook endpoint is configured for this form.', { exact: true });
   await page.locator('#webhook-url').fill(receiverUrl);

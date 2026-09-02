@@ -44,9 +44,10 @@
     </aside>
     <section id="welcome" class="panel welcome"><p class="eyebrow">START HERE</p><h2>Choose a form to continue</h2><p>Select a form from <strong>Your forms</strong> to edit its schema, publish a version, inspect submissions, or configure delivery.</p><ol class="workflow"><li><strong>Define</strong><span>Describe fields with portable JSON Schema.</span></li><li><strong>Publish</strong><span>Choose exactly which saved version accepts submissions.</span></li><li><strong>Connect</strong><span>Add your website and monitor delivery.</span></li></ol><p class="muted">Creating something new? Use <strong>+ New form</strong> above.</p></section>
     <section id="editor-panel" hidden aria-labelledby="editor-heading">
-      <div class="section-heading"><div><p id="form-status" class="eyebrow"></p><h2 id="editor-heading" tabindex="-1">New form</h2></div><div class="actions"><button id="review-submissions" type="button" hidden>Review submissions</button><button id="reload-form" type="button" hidden>Reload server version</button></div></div>
+      <div class="section-heading"><div><p id="form-status" class="eyebrow"></p><h2 id="editor-heading" tabindex="-1">New form</h2></div><div class="actions"><button id="reload-form" class="quiet" type="button" hidden>Reload server version</button></div></div>
       <p id="read-only" class="muted" hidden>Your workspace role is read-only. An owner or admin can save and publish.</p>
-      <nav class="form-nav" aria-label="Form tasks"><a href="#metadata-heading">Details</a><a href="#schema-heading">Schema</a><a href="#publication-heading">Publish</a><a href="#integration-heading">Connect</a><a href="#submissions-heading">Submissions</a><a href="#webhook-heading">Webhook</a></nav>
+      <nav class="form-nav" aria-label="Form tasks"><button type="button" data-form-task="build" aria-controls="task-build">Build</button><button type="button" data-form-task="publish" aria-controls="task-publish">Publish</button><button type="button" data-form-task="connect" aria-controls="task-connect">Connect</button><button type="button" data-form-task="submissions" aria-controls="task-submissions">Submissions</button><button type="button" data-form-task="webhook" aria-controls="task-webhook">Webhook</button></nav>
+      <div id="task-build" class="form-task">
       <section class="panel" aria-labelledby="metadata-heading"><h3 id="metadata-heading" tabindex="-1">Form details</h3>
         <form id="metadata-form"><fieldset id="metadata-fields"><div class="two-columns"><label>Name<input id="form-name" required pattern="[a-z][a-z0-9-]{2,62}" maxlength="63" placeholder="contact-us" aria-describedby="name-help"></label><label>Title<input id="form-title" required minlength="3" maxlength="100" placeholder="Contact us"></label></div>
           <p id="name-help" class="help">Name is permanent: 3–63 lowercase letters, digits or hyphens; start with a letter.</p>
@@ -64,12 +65,18 @@
         <div class="actions"><button id="save-schema" class="primary" type="button">Validate &amp; create form</button><span id="dirty" role="status"></span></div>
       </section>
       <section class="panel" aria-labelledby="preview-heading"><h3 id="preview-heading">Field preview</h3><p class="help">An illustrative preview of simple top-level fields, not a validator or a submission form. Advanced constraints remain in your canonical schema. No remote references are fetched.</p><div id="preview"></div></section>
+      </div>
+      <div id="task-publish" class="form-task" hidden>
       <section id="publication" class="panel" hidden aria-labelledby="publication-heading"><h3 id="publication-heading">Publish deliberately</h3><p id="publication-note"></p><button id="publish" class="primary" type="button" disabled>Review publication</button><p class="help">Saving never changes the public schema. Publishing selects one saved version; existing submissions keep their original version.</p></section>
+      </div>
+      <div id="task-connect" class="form-task" hidden>
       <section id="integration" class="panel" hidden aria-labelledby="integration-heading"><h3 id="integration-heading">Connect your website</h3><p id="integration-state"></p>
         <label>Public form key<input id="public-key" readonly></label><label>Submission endpoint<input id="submission-endpoint" readonly></label>
         <p class="help">The public key is browser-safe. Never put a service token or first-party assertion in your website. Add the website’s origin above before embedding.</p>
         <pre><code id="integration-example"></code></pre><button id="copy-example" type="button" disabled>Copy JavaScript example</button>
       </section>
+      </div>
+      <div id="task-submissions" class="form-task" hidden>
       <section id="submissions-panel" class="panel" hidden aria-labelledby="submissions-heading">
         <div class="section-heading"><h3 id="submissions-heading">Submissions</h3><button id="submission-load" type="button">Load submissions</button></div>
         <p id="submission-access" class="help" hidden>Only workspace owners and admins can review submission data.</p>
@@ -93,6 +100,8 @@
         </section>
         <p class="help">Content is cleared when this tab is hidden or the form changes. No submission content is stored locally or sent to AI.</p>
       </section>
+      </div>
+      <div id="task-webhook" class="form-task" hidden>
       <section id="webhook-panel" class="panel" hidden aria-labelledby="webhook-heading"><div class="section-heading"><h3 id="webhook-heading">Webhook delivery</h3><button id="load-webhook" type="button">Load webhook</button></div>
         <p id="webhook-access" class="help" hidden>Only workspace owners and admins manage webhooks.</p><p id="webhook-state" role="status">Load this form’s webhook to see its current state.</p>
         <p class="help">Pause stops future enqueueing only. Accepted deliveries keep their original destination, headers and signing secret after pause, rotation or deletion. Resuming does not backfill submissions.</p>
@@ -109,6 +118,7 @@
         <h4>Recent deliveries</h4><button id="load-deliveries" type="button">Load delivery history</button><div id="webhook-deliveries"></div>
         <p class="help">A bounded recent window, not complete historical evidence. Replay is only available for dead letters and retains the original delivery ID and payload. The receiver must deduplicate IDs. A 2xx response is acknowledgement, not proof of signature verification.</p>
       </section>
+      </div>
       <p class="help">Archive and delete are not exposed by the current API. This UI will not pretend to remove your form.</p>
       <p class="help"><a href="/assets/forms.LICENSE.txt">Editor third-party notices</a></p>
     </section>

@@ -21,8 +21,9 @@ aside{position:sticky;top:1rem}
 .workflow li{display:grid;gap:.2rem;padding:1rem;background:#0d1913;border:1px solid var(--line);border-radius:.55rem}
 .workflow span{color:var(--muted);font-size:.86rem}
 .form-nav{position:sticky;top:0;z-index:5;display:flex;gap:.35rem;overflow-x:auto;margin:0 0 1rem;padding:.55rem;background:#0b1310ef;border:1px solid var(--line);border-radius:.65rem}
-.form-nav a{flex:0 0 auto;padding:.45rem .7rem;border-radius:.4rem;color:var(--muted);text-decoration:none;font-size:.86rem}
-.form-nav a:hover,.form-nav a:focus-visible{background:#1a3326;color:#edf7f0}
+.form-nav button{flex:0 0 auto;min-height:38px;padding:.4rem .75rem;border-color:transparent;background:transparent;color:var(--muted);font-size:.86rem}
+.form-nav button:hover:not(:disabled),.form-nav button[aria-current=true]{border-color:#57786a;background:#1a3326;color:#edf7f0}
+.form-nav button[aria-current=true]{color:var(--accent);font-weight:650}
 @media(max-width:850px){aside{position:static}.workflow{grid-template-columns:1fr}.welcome{padding:1.25rem}}
 @media(max-width:520px){
   .topbar,main{width:calc(100% - 1.25rem)}
@@ -35,5 +36,5 @@ aside{position:sticky;top:1rem}
   .layout{gap:1rem}
   #forms-list{grid-template-columns:1fr}
   .form-nav{margin-inline:-.15rem;flex-wrap:wrap;overflow:visible}
-  .form-nav a{flex:1 0 calc(33.333% - .35rem);text-align:center}
+  .form-nav button{flex:1 0 calc(33.333% - .35rem);text-align:center}
 }

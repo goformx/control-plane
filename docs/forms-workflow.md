@@ -15,10 +15,10 @@ does not claim that the apex is deployed or that account recovery is released.
    stay in JSON; the bounded preview is illustrative, not a second validator.
 4. Choose **Validate & create form**. Go validates the definition and returns
    actionable JSON Pointer errors. Invalid input stays in the editor.
-5. Review the saved draft, then choose **Review publication** and confirm the
-   exact version. Saving never publishes implicitly. Editing a saved snapshot
+5. Review the saved draft, open **Publish**, then choose **Review publication**
+   and confirm the exact version. Saving never publishes implicitly. Editing a saved snapshot
    and saving again creates a new immutable draft; the live version is unchanged.
-6. Copy the public integration example. Supply values matching your schema and
+6. Open **Connect** and copy the public integration example. Supply values matching your schema and
    retain the same idempotency key, schema-version header, and body when retrying
    one submission. Only the public `gfpk_` key belongs in a browser; no management
    token is needed.
@@ -29,7 +29,7 @@ webhook, submission, or membership-administration permissions.
 
 ## Submit and review accepted data
 
-1. Open the published form and review **Connect your website**. Add the website's
+1. Open the published form, choose **Connect**, and review **Connect your website**. Add the website's
    origin under **Allowed browser origins** before embedding. An empty list blocks
    cross-origin browser submissions. Choose **Save details**; origin changes apply
    immediately and do not require republishing the schema.
@@ -43,8 +43,8 @@ webhook, submission, or membership-administration permissions.
    exact request body. Reusing a key with a different body or schema version
    returns `409` `idempotency_conflict`; it does not mean the changed submission
    was accepted. A changed submission requires a new key.
-4. After the API accepts the submission, return to the same form and choose
-   **Review submissions**. Only owners and admins can view received content.
+4. After the API accepts the submission, return to the same form, choose
+   **Submissions**, then **Load submissions**. Only owners and admins can view received content.
    **Apply submission filters** can narrow the list by received time, acceptance
    status, or exact accepted schema version.
 5. Choose a submission row to inspect its ID, request ID, accepted timestamp,
