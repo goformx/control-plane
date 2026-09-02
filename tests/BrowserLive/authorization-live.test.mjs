@@ -105,6 +105,7 @@ test('real integration authorization changes take effect on the next request', {
   await foreign.getByText('member · Server-authorized workspace').waitFor();
   await foreign.getByRole('button', { name: /Authorization transition gate/ }).click();
   await foreign.getByRole('heading', { name: 'Authorization transition gate', exact: true }).waitFor();
+  await foreign.getByRole('button', { name: 'Webhook', exact: true }).click();
   await foreign.locator('#webhook-access').waitFor({ state: 'visible' });
   await foreign.waitForFunction(() => document.querySelector('#manage-tokens')?.disabled === true);
   assert.equal(await foreign.getByRole('button', { name: 'Manage API access', exact: true }).isDisabled(), true);

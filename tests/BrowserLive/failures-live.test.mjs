@@ -101,6 +101,7 @@ test('committed mutations with lost responses require explicit reconciliation', 
   await page.getByRole('button', { name: 'I have reconciled the change', exact: true }).click();
   assert.equal(await page.locator('#integration-uncertain').isVisible(), false);
 
+  await page.getByRole('button', { name: 'Webhook', exact: true }).click();
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await page.getByText('No webhook endpoint is configured for this form.', { exact: true }).waitFor();
   await arm('PUT', `/v1/forms/${owned.id}/webhook`);

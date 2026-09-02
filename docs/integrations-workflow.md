@@ -60,7 +60,7 @@ to unlock further mutations.
 
 ## Configure and operate a webhook
 
-1. Select the form and choose **Load webhook** before creating or replacing an
+1. Select the form, open **Webhook**, and choose **Load webhook** before creating or replacing an
    endpoint. A missing endpoint is an expected state, not permission to skip the
    reload.
 2. Implement the tested receiver contract first: verify the signature over the

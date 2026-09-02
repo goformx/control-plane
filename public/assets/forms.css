@@ -5,3 +5,36 @@
 @media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important}}
 #submission-list{display:grid;gap:.5rem}#submission-list button{text-align:left;overflow-wrap:anywhere}#submission-error{border:1px solid #d29b91;padding:1rem;color:#ffe2dc}#submission-detail{margin-top:1.5rem;border-top:1px solid var(--line);padding-top:1rem}#submission-detail dl{display:grid;grid-template-columns:minmax(8rem,1fr) minmax(0,2fr);gap:.5rem 1rem}#submission-detail dt{font-weight:650;overflow-wrap:anywhere}#submission-detail dd{margin:0;white-space:pre-wrap;overflow-wrap:anywhere}#submission-values{padding:1rem;background:#08110c;border-radius:.4rem}@media(max-width:600px){#submission-detail dl{grid-template-columns:1fr}#submission-detail dd{margin-bottom:.7rem}}
 #tokens-panel{margin-bottom:1.5rem}.scope-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.5rem}.integration-record{padding:.8rem 0;border-bottom:1px solid var(--line);overflow-wrap:anywhere}.integration-record p{margin:.25rem 0}.secret-reveal{border:2px solid var(--accent);border-radius:.5rem;padding:1rem;margin-top:1rem}#issued-token{font-family:ui-monospace,monospace}#integration-error{border:1px solid #d29b91;padding:1rem;color:#ffe2dc}#token-scopes{margin:.8rem 0}
+
+/* The control plane is task-oriented: make the primary path legible before
+   exposing the dense schema and integration controls. */
+button.quiet{background:transparent;border-color:transparent;color:var(--muted)}
+button.quiet:hover:not(:disabled){background:#14251d;color:#edf7f0}
+.brand span{margin-left:.8rem;padding:.18rem .48rem;border:1px solid var(--line);border-radius:999px;font-size:.68rem;letter-spacing:.04em}
+.workspace{gap:1.5rem}
+.workspace-actions{display:flex;gap:.6rem;flex-wrap:wrap;justify-content:flex-end}
+aside{position:sticky;top:1rem}
+.welcome{padding:2rem}
+.welcome h2{font-size:1.65rem;max-width:28rem}
+.welcome>p{max-width:42rem}
+.workflow{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.75rem;list-style:none;padding:0;margin:1.5rem 0}
+.workflow li{display:grid;gap:.2rem;padding:1rem;background:#0d1913;border:1px solid var(--line);border-radius:.55rem}
+.workflow span{color:var(--muted);font-size:.86rem}
+.form-nav{position:sticky;top:0;z-index:5;display:flex;gap:.35rem;overflow-x:auto;margin:0 0 1rem;padding:.55rem;background:#0b1310ef;border:1px solid var(--line);border-radius:.65rem}
+.form-nav button{flex:0 0 auto;min-height:38px;padding:.4rem .75rem;border-color:transparent;background:transparent;color:var(--muted);font-size:.86rem}
+.form-nav button:hover:not(:disabled),.form-nav button[aria-current=true]{border-color:#57786a;background:#1a3326;color:#edf7f0}
+.form-nav button[aria-current=true]{color:var(--accent);font-weight:650}
+@media(max-width:850px){aside{position:static}.workflow{grid-template-columns:1fr}.welcome{padding:1.25rem}}
+@media(max-width:520px){
+  .topbar,main{width:calc(100% - 1.25rem)}
+  .topbar{padding:.7rem 0}
+  .brand{font-size:1.2rem}
+  main{padding-top:1rem}
+  .workspace{display:grid}
+  .workspace-actions{display:grid;grid-template-columns:1fr 1fr;width:100%}
+  .workspace-actions button{width:100%;padding-inline:.55rem}
+  .layout{gap:1rem}
+  #forms-list{grid-template-columns:1fr}
+  .form-nav{margin-inline:-.15rem;flex-wrap:wrap;overflow:visible}
+  .form-nav button{flex:1 0 calc(33.333% - .35rem);text-align:center}
+}
