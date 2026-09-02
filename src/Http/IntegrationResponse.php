@@ -52,7 +52,7 @@ final class IntegrationResponse
         if (!is_string($data['id'] ?? null) || preg_match('/\A[A-Za-z0-9_-]{16}\z/', $data['id']) !== 1 ||
             ($data['organizationId'] ?? '') !== $organization || !is_string($data['name'] ?? null) || strlen($data['name']) > 400 ||
             !in_array($data['status'] ?? '', ['active', 'expired', 'revoked'], true) || !is_array($data['scopes'] ?? null) ||
-            !array_is_list($data['scopes']) || count($data['scopes']) < 1 || count($data['scopes']) > 8) { throw new \UnexpectedValueException(); }
+            !array_is_list($data['scopes']) || count($data['scopes']) < 1 || count($data['scopes']) > count(ManagementScope::cases())) { throw new \UnexpectedValueException(); }
         foreach ($data['scopes'] as $scope) { if (!is_string($scope) || ManagementScope::tryFrom($scope) === null) { throw new \UnexpectedValueException(); } }
         $result = array_intersect_key($data, array_flip(['id', 'name', 'organizationId', 'scopes', 'status']));
         foreach (['createdAt', 'expiresAt', 'lastUsedAt', 'revokedAt'] as $key) {
