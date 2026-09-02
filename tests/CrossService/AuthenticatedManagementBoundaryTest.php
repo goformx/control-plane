@@ -309,7 +309,11 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
             ));
         }
         if ($body !== null) {
-            $headers[] = 'Content-Type: ' . ($method === 'PATCH' ? 'application/merge-patch+json' : 'application/json');
+            $formMetadataPatch = $method === 'PATCH' && preg_match(
+                '#\A/api/control-plane/forms/[0-9a-f-]{36}\z#i',
+                $path,
+            ) === 1;
+            $headers[] = 'Content-Type: ' . ($formMetadataPatch ? 'application/merge-patch+json' : 'application/json');
             $headers[] = 'X-XSRF-TOKEN: ' . rawurldecode($cookies['XSRF-TOKEN'] ?? '');
         }
         $headers = [...$headers, ...$extraHeaders];
