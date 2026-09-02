@@ -1,7 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromium } from 'playwright';
-import { startServer, FORM_ID } from './fixtures/server.mjs';
+import { startServer, FORM_ID, ORG_ID } from './fixtures/server.mjs';
+
+const emptyTokenPage = { data: [], meta: { limit: 100, nextCursor: null } };
 
 async function fixture(t) {
   const server = await startServer({ populated: true });
@@ -28,7 +30,7 @@ test('one-time token reveal needs no metadata follow-up and clears on form chang
   const token = 'gfst_' + 'a'.repeat(43); // Synthetic, never usable against a real API.
   await page.route('**/api/control-plane/service-tokens', async route => {
     requests.push(route.request());
-    await route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, json: { data: route.request().method() === 'POST' ? { token } : [] } });
+    await route.fulfill({ status: route.request().method() === 'POST' ? 201 : 200, json: route.request().method() === 'POST' ? { data: { token } } : emptyTokenPage });
   });
   await prepareToken(page);
   await page.getByRole('button', { name: 'Create scoped token' }).click();
@@ -44,11 +46,51 @@ test('one-time token reveal needs no metadata follow-up and clears on form chang
   assert.equal(await page.locator('#token-reveal').isVisible(), false);
 });
 
+test('complete token inventory can page past 100 records and revoke an older token', async t => {
+  const { page } = await fixture(t);
+  const rows = Array.from({ length: 205 }, (_, index) => ({
+    id: index.toString().padStart(16, '0'), name: `inventory-${index.toString().padStart(3, '0')}`,
+    organizationId: ORG_ID, scopes: ['forms:read'], status: 'active',
+    createdAt: '2026-08-30T00:00:00Z', expiresAt: '2027-08-30T00:00:00Z',
+  }));
+  const requests = [];
+  await page.route(/\/api\/control-plane\/service-tokens(?:\/[A-Za-z0-9_-]{16})?(?:\?.*)?$/, async route => {
+    const request = route.request(); const url = new URL(request.url()); requests.push(`${request.method()} ${url.pathname}${url.search}`);
+    if (request.method() === 'DELETE') {
+      const id = url.pathname.split('/').pop(); const token = rows.find(row => row.id === id);
+      assert.ok(token); token.status = 'revoked'; await route.fulfill({ status: 204, body: '' }); return;
+    }
+    const offset = url.searchParams.get('cursor') ? Number(url.searchParams.get('cursor').replace('page-', '')) : 0;
+    await route.fulfill({ json: { data: rows.slice(offset, offset + 100), meta: {
+      limit: 100, nextCursor: rows.length > offset + 100 ? `page-${offset + 100}` : null,
+    } } });
+  });
+  await page.getByRole('button', { name: 'Manage API access' }).click();
+  await page.getByText('Page 1 · 100 token records · Older records available', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Older tokens' }).click();
+  await page.getByText('Page 2 · 100 token records · Older records available', { exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Older tokens' }).click();
+  await page.getByText('Page 3 · 5 token records · End of inventory', { exact: true }).waitFor();
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: 'Revoke inventory-204', exact: true }).click();
+  await page.getByText('Token revoked. It cannot authenticate new API requests.', { exact: true }).waitFor();
+  assert.equal(await page.getByRole('button', { name: 'Revoke inventory-204', exact: true }).count(), 0);
+  assert.deepEqual(requests.slice(0, 5), [
+    'GET /api/control-plane/service-tokens',
+    'GET /api/control-plane/service-tokens?cursor=page-100',
+    'GET /api/control-plane/service-tokens?cursor=page-200',
+    'DELETE /api/control-plane/service-tokens/0000000000000204',
+    'GET /api/control-plane/service-tokens?cursor=page-200',
+  ]);
+  await page.getByRole('button', { name: 'Newer tokens' }).click();
+  await page.getByText('Page 2 · 100 token records · Older records available', { exact: true }).waitFor();
+});
+
 test('uncertain issuance blocks retry; refreshed membership blocks integration access', async t => {
   const { page, data } = await fixture(t); let mutations = 0;
   await page.route('**/api/control-plane/service-tokens', async route => {
     if (route.request().method() === 'POST') { mutations++; await route.fulfill({ status: 502, json: { error: {} } }); }
-    else await route.fulfill({ json: { data: [] } });
+    else await route.fulfill({ json: emptyTokenPage });
   });
   await prepareToken(page);
   await page.getByRole('button', { name: 'Create scoped token' }).click();
@@ -81,7 +123,7 @@ test('uncertain issuance blocks retry; refreshed membership blocks integration a
 test('proxied assertion failure is a definite no-op and does not expire the PHP session', async t => {
   const { page } = await fixture(t);
   await page.route('**/api/control-plane/service-tokens', route => route.fulfill(route.request().method() === 'GET' ?
-    { json: { data: [] } } : { status: 502, json: { error: { code: 'data_plane_authentication_failed' } } }));
+    { json: emptyTokenPage } : { status: 502, json: { error: { code: 'data_plane_authentication_failed' } } }));
   await prepareToken(page);
   await page.getByRole('button', { name: 'Create scoped token' }).click();
   await page.getByText('data-plane authentication is unavailable', { exact: false }).waitFor();
@@ -110,7 +152,7 @@ test('delivery-history assertion failure does not latch a valid workspace read-o
 test('definite mutation rejections do not require uncertain-outcome acknowledgement', async t => {
   const { page } = await fixture(t); let tokenStatus = 503;
   await page.route('**/api/control-plane/service-tokens', async route => {
-    if (route.request().method() === 'GET') { await route.fulfill({ json: { data: [] } }); return; }
+    if (route.request().method() === 'GET') { await route.fulfill({ json: emptyTokenPage }); return; }
     const code = tokenStatus === 503 ? 'service_unavailable' : tokenStatus === 403 ? 'data_plane_access_denied' : 'conflict';
     await route.fulfill({ status: tokenStatus, json: { error: { code } } });
   });

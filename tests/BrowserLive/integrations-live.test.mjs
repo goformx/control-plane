@@ -41,6 +41,19 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
       throw new Error(`Disposable data-plane evidence query failed or timed out (${location}); credentials and rows withheld.`);
     }
   };
+  const seedTokenInventory = organizationId => {
+    try { return JSON.parse(execFileSync('php', ['tests/BrowserLive/fixtures/seed-token-inventory.php'], {
+      input: JSON.stringify({ organizationId }), encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'], timeout: 30000,
+    })); }
+    catch (error) {
+      let location = 'unavailable';
+      try {
+        const info = JSON.parse(error.stderr);
+        if (/^[a-z-]+$/.test(info.stage) && /^[A-Za-z0-9_\\]+$/.test(info.exception) && /^[A-Za-z0-9_.-]+$/.test(info.file) && Number.isInteger(info.line)) location = `${info.stage}: ${info.exception} in ${info.file}:${info.line}`;
+      } catch { /* Never print unstructured subprocess output. */ }
+      throw new Error(`Disposable token inventory fixture failed or timed out (${location}); credentials and rows withheld.`);
+    }
+  };
 
   const users = JSON.parse(fixture({ action: 'create' }));
   const browserServer = await chromium.launchServer();
@@ -154,6 +167,9 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   });
   assert.equal(beforeRevoke.status, 200);
   assert.ok((await beforeRevoke.text()).includes(owned.id), 'Scoped token did not return the owned form; body withheld.');
+  const seededInventory = seedTokenInventory(owned.organizationId);
+  assert.equal(seededInventory.count, 105);
+  assert.match(seededInventory.oldestId, /^[A-Za-z0-9_-]{16}$/);
   await page.getByRole('button', { name: 'Reload token metadata', exact: true }).click();
   await waitForIntegration(`${integrationName} · active`, { exact: true });
   assert.equal(await page.locator('#issued-token').inputValue(), '', 'A later dashboard action must clear the one-time token reveal.');
@@ -165,6 +181,12 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   });
   assert.equal(afterRevoke.status, 401);
   await afterRevoke.text();
+  await page.getByRole('button', { name: 'Older tokens', exact: true }).click();
+  await waitForIntegration(`${seededInventory.oldestName} · active`, { exact: true });
+  page.once('dialog', dialog => dialog.accept());
+  await page.getByRole('button', { name: `Revoke ${seededInventory.oldestName}`, exact: true }).click();
+  await waitForIntegration('Token revoked. It cannot authenticate new API requests.', { exact: true });
+  assert.equal(await page.getByRole('button', { name: `Revoke ${seededInventory.oldestName}`, exact: true }).count(), 0);
 
   await page.getByRole('button', { name: 'Load webhook', exact: true }).click();
   await waitForIntegration('No webhook endpoint is configured for this form.', { exact: true });
@@ -253,6 +275,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
   const durable = dataPlaneEvidence({ organizationId: owned.organizationId, formId: owned.id, tokenName: integrationName,
     tokenPlaintext: externalToken, webhookSecrets: [previousSecret, currentSecret] });
   assert.deepEqual([durable.activeTokenCount, durable.revokedTokenCount, durable.webhookEndpointCount], [0, 1, 0]);
+  assert.deepEqual([durable.organizationActiveTokenCount, durable.organizationRevokedTokenCount], [104, 2]);
   assert.deepEqual([durable.plaintextTokenMatches, durable.plaintextWebhookConfigMatches], [0, 0]);
   assert.ok(durable.webhookConfigRowsScanned >= 1, 'Plaintext evidence must inspect retained delivery configuration rows.');
   assert.deepEqual(new Set(durable.deliveries.map(delivery => delivery.endpointId)).size, 1);
@@ -263,7 +286,7 @@ test('real owner dashboard → PHP → Go → PostgreSQL integration lifecycle',
     [rotatedDelivery.id]: ['delivered', 1, 204],
   });
   assert.deepEqual(durable.events.map(event => event.event), [
-    'service_token.created', 'service_token.revoked', 'webhook.created', 'webhook.paused',
+    'service_token.created', 'service_token.revoked', 'service_token.revoked', 'webhook.created', 'webhook.paused',
     'webhook.resumed', 'webhook.signing_secret_rotated', 'webhook.delivery_replayed', 'webhook.deleted',
   ]);
   assert.equal(new Set(durable.events.map(event => event.auditId)).size, durable.events.length);

@@ -42,8 +42,11 @@ tokens and webhook signing secrets.
    that are no longer needed.
 5. Verify the integration using the canonical API/client guide. Token metadata
    shows an identifier, scopes, status, expiry, and last observed use; it can
-   never recover the token value. The list is limited to 100 recent records and
-   is not a complete historical inventory.
+   never recover the token value. The dashboard loads at most 100 records per
+   page; follow **Older tokens** until it reports the end of the inventory.
+   Refresh starts a new walk from the newest records. A token created while you
+   page may require that refresh to appear, while concurrent revocation is shown
+   when the affected page is loaded again.
 
 To rotate safely, create a replacement with the minimum required scopes, update
 the consumer's secret custody, verify the replacement, then revoke the old token
