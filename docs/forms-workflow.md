@@ -26,6 +26,38 @@ Owner/admin memberships may write; members may read. The server rechecks
 membership on every management request. These controls do not grant token,
 webhook, submission, or membership-administration permissions.
 
+## Submit and review accepted data
+
+1. Open the published form and review **Connect your website**. Add the website's
+   origin under **Allowed browser origins** before embedding. An empty list blocks
+   cross-origin browser submissions.
+2. Choose **Copy JavaScript example** and replace only the example values with
+   data that satisfies the published schema. The rendered example is generated
+   from the selected form's public key, submission endpoint, and current schema
+   version; it does not contain a management credential.
+3. Use a new idempotency key for a new logical submission. If the response is
+   interrupted and the same submission must be retried, retain both the original
+   key and the exact request body. A changed body requires a new key.
+4. After the API accepts the submission, return to the same form and choose
+   **Review submissions**. Only owners and admins can view received content.
+   **Apply submission filters** can narrow the list by received time, acceptance
+   status, or exact accepted schema version.
+5. Choose a submission row to inspect its ID, request ID, accepted timestamp,
+   lossless values, redacted paths, and **Exact accepted JSON Schema**. The detail
+   uses the version that accepted this row even if a newer schema is now live.
+   Recent webhook history is a bounded form-level window; an absent entry does
+   not prove the submission was never delivered.
+6. Use **Export JSON** for an exact machine-readable export or **Export CSV** for
+   initial spreadsheet viewing. Exports use the applied filters across at most
+   1,000 rows / 8 MiB, not only the visible page, and are audited. Keep exported
+   personal data in appropriate custody. Spreadsheet edits or re-saves can remove
+   the CSV cell protections.
+
+The generated browser example and this review path run in the real cross-service
+browser gate. For server-side submission clients and canonical request semantics,
+follow the [API/client guide](https://github.com/goformx/goformx/blob/main/docs/api-clients.md)
+instead of translating dashboard behavior into a separate contract.
+
 ## Work with an AI or your own dashboard
 
 An AI can produce a candidate JSON Schema for you to inspect and paste. Treat
