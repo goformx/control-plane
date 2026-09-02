@@ -2,8 +2,6 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Architecture;
-
 use PHPUnit\Framework\TestCase;
 use Waaseyaa\SiteContract\SiteManifestParser;
 use Waaseyaa\SiteContract\SiteManifestSchema;

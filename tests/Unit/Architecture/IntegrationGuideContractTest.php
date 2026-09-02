@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-namespace App\Tests\Architecture;
+namespace App\Tests\Unit\Architecture;
 
 use PHPUnit\Framework\TestCase;
 
@@ -10,7 +10,7 @@ final class IntegrationGuideContractTest extends TestCase
 {
     public function testOperatorGuideTracksTheRenderedControlsAndCanonicalContracts(): void
     {
-        $root = dirname(__DIR__, 2);
+        $root = dirname(__DIR__, 3);
         $guide = (string) file_get_contents($root . '/docs/integrations-workflow.md');
         $template = (string) file_get_contents($root . '/templates/app.html.twig');
         $integrationUi = (string) file_get_contents($root . '/ui/integrations-app.js');
