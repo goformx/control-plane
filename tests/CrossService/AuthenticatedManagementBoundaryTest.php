@@ -176,6 +176,18 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
         self::assertSame($expected, $actual);
     }
 
+    public function testManagementScopeInventoryMatchesThePinnedCanonicalOpenApi(): void
+    {
+        $path = getenv('GOFORMX_CONTRACT_PATH') ?: dirname(__DIR__, 2) . '/.ci/goformx/goforms/contracts/openapi.v1.yaml';
+        self::assertFileExists($path);
+        $contract = Yaml::parseFile($path);
+        $actual = array_map(static fn (ManagementScope $scope): string => $scope->value, ManagementScope::cases());
+        foreach (['CreateServiceToken', 'ServiceToken'] as $schema) {
+            $expected = $contract['components']['schemas'][$schema]['properties']['scopes']['items']['enum'] ?? null;
+            self::assertSame($actual, $expected, $schema . ' must project the complete PHP management-scope inventory');
+        }
+    }
+
     /** @param array<string, string> $cookies @param array<string, string> $foreignCookies */
     private function exerciseFormWorkflow(string $url, array &$cookies, array &$foreignCookies, string $organization, string $foreign): void
     {
