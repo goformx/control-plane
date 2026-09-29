@@ -4,6 +4,8 @@ The human-facing account and management application for [GoFormX](https://goform
 
 This repository owns browser sessions, accounts, organization membership, navigation, and human workflows. The Go service at `api.goformx.com` remains the source of truth for forms, schemas, publication, submissions, service tokens, and webhooks. This application never connects to the GoFormX data-plane database and never sends a privileged service credential to a browser.
 
+The current [product direction](https://github.com/goformx/goformx/issues/84) is to let developers create and connect forms from their existing AI tools, then review authorized submissions from multiple sites in one human inbox. The personal-site contact flow remains a regression gate; it is not the full product or release milestone. Publication stays explicit, and a default assistant connection does not receive submission-read permission.
+
 ## Issue tracking
 
 Product work for this repository is tracked centrally with the data plane so
