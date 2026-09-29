@@ -79,6 +79,12 @@ test('released account flow registers, verifies, rotates sessions and resets pas
     await page.getByRole('button', { name: 'Sign in' }).click();
     await page.waitForURL(origin + '/app');
     assert.equal(await status('/api/control-plane/context'), 200);
+    const logoutStatus = await page.evaluate(async () => {
+      const csrf = decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+      return (await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-XSRF-TOKEN': csrf } })).status;
+    });
+    assert.equal(logoutStatus, 200);
+    assert.notEqual(await status('/api/control-plane/context'), 200, 'logout invalidates the active browser session');
   } finally {
     await browser.close();
   }
