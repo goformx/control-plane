@@ -197,6 +197,7 @@ final class SubmissionWorkflowTest extends TestCase
         self::assertSame(503, $response->getStatusCode());
         self::assertFalse($response->headers->has('Content-Disposition'));
         self::assertFalse($response->headers->has('X-GoFormX-Export-ID'));
+        self::assertFalse($response->headers->has('X-GoFormX-Export-Bytes'));
         self::assertStringNotContainsString('private-canary', $response->getContent());
     }
 
@@ -222,6 +223,7 @@ final class SubmissionWorkflowTest extends TestCase
         self::assertSame($body, $response->getContent());
         self::assertSame('attachment; filename="goformx-submissions-' . self::EXPORT . '.csv"', $response->headers->get('Content-Disposition'));
         self::assertSame((string) strlen($body), $response->headers->get('Content-Length'));
+        self::assertSame((string) strlen($body), $response->headers->get('X-GoFormX-Export-Bytes'));
     }
 
     public function testUpstreamDenialAndAuditFailureNeverGainDownloadHeaders(): void
@@ -236,6 +238,7 @@ final class SubmissionWorkflowTest extends TestCase
             self::assertSame($status === 401 ? 502 : $status, $response->getStatusCode());
             self::assertFalse($response->headers->has('Content-Disposition'));
             self::assertFalse($response->headers->has('X-GoFormX-Export-ID'));
+            self::assertFalse($response->headers->has('X-GoFormX-Export-Bytes'));
             self::assertFalse($response->headers->has('Content-Length'));
             self::assertSame($status === 429 ? '1' : null, $response->headers->get('Retry-After'));
             self::assertStringNotContainsString('private-canary', $response->getContent());

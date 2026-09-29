@@ -1,15 +1,17 @@
-// Read while enforcing the operation's budget. Fetch rejects broken HTTP framing;
-// a declared length is checked again so a successful prefix is never accepted.
+// Fetch decodes compressed bodies, but exposes the wire Content-Length. Always
+// cap decoded bytes; compare that header with body bytes only for identity data.
 export async function readBoundedResponse(response, maxBytes) {
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 1) throw new TypeError('Invalid response budget.');
   const declared = response.headers.get('Content-Length');
   const length = declared === null ? null : (/^(0|[1-9][0-9]*)$/.test(declared) ? Number(declared) : NaN);
-  if (length !== null && (!Number.isSafeInteger(length) || length > maxBytes)) {
+  const encoding = response.headers.get('Content-Encoding')?.trim().toLowerCase();
+  const identity = !encoding || encoding === 'identity';
+  if (length !== null && (!Number.isSafeInteger(length) || (identity && length > maxBytes))) {
     await response.body?.cancel();
     throw new Error('Response exceeds its supported size or has invalid length.');
   }
   if (!response.body) {
-    if (length === 0) return new Blob([]);
+    if (identity && length === 0) return new Blob([]);
     throw new Error('Response body is incomplete.');
   }
   const reader = response.body.getReader();
@@ -20,12 +22,12 @@ export async function readBoundedResponse(response, maxBytes) {
       const { done, value } = await reader.read();
       if (done) break;
       bytes += value.byteLength;
-      if (bytes > maxBytes || (length !== null && bytes > length)) {
+      if (bytes > maxBytes || (identity && length !== null && bytes > length)) {
         throw new Error('Response exceeds its supported size or declared length.');
       }
       chunks.push(value);
     }
-    if (length !== null && bytes !== length) throw new Error('Response body is incomplete.');
+    if (identity && length !== null && bytes !== length) throw new Error('Response body is incomplete.');
     return new Blob(chunks);
   } catch (error) {
     await reader.cancel().catch(() => {});

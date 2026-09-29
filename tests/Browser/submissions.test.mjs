@@ -77,6 +77,37 @@ test('pagination and applied filters drive both verified export formats without 
   }
 });
 
+test('real Chromium Fetch accepts gzip JSON and export using decoded byte length', async t => {
+  const { page, data } = await fixture(t);
+  data.compressSubmissions = true;
+  const responses = [];
+  page.on('response', response => {
+    if (new URL(response.url()).pathname.includes('/submissions')) responses.push(response);
+  });
+  await page.getByRole('button', { name: 'Load submissions', exact: true }).click();
+  await page.getByText('1 submission · page 1', { exact: true }).waitFor();
+  await page.locator('#submission-list button').first().click();
+  await page.getByRole('heading', { name: 'Submission detail', exact: true }).waitFor();
+  const ready = page.waitForEvent('download');
+  await page.getByRole('button', { name: 'Export JSON', exact: true }).click();
+  const download = await ready;
+  const chunks = []; for await (const chunk of await download.createReadStream()) chunks.push(chunk);
+  const body = Buffer.concat(chunks);
+  assert.ok(body.toString().includes(row().id));
+  const exported = responses.find(response => new URL(response.url()).pathname.endsWith('/export'));
+  assert.equal(exported.headers()['content-encoding'], 'gzip');
+  assert.equal(Number(exported.headers()['x-goformx-export-bytes']), body.byteLength);
+  assert.notEqual(Number(exported.headers()['content-length']), body.byteLength);
+  assert.ok(responses.some(response => response.headers()['content-encoding'] === 'gzip'
+    && new URL(response.url()).pathname.endsWith('/submissions')));
+
+  data.exportDecodedLengthOverride = body.byteLength + 1;
+  const downloads = []; page.on('download', () => downloads.push(true));
+  await page.getByRole('button', { name: 'Export JSON', exact: true }).click();
+  await page.getByText('Download integrity could not be verified. No file was offered.', { exact: true }).waitFor();
+  assert.deepEqual(downloads, []);
+});
+
 test('empty, loading, denied and incomplete export states clear data and never offer partial files', async t => {
   const { page, data } = await fixture(t, { rows: [] });
   data.delaySubmissions = 500;

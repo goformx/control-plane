@@ -95,6 +95,9 @@ final readonly class ManagementSubmissionsController
                 $response->headers->set('Content-Type', $type === 'text/csv' ? 'text/csv; charset=utf-8' : $type);
                 $response->headers->set('X-GoFormX-Export-ID', $exportId);
                 $response->headers->set('Content-Length', $length);
+                // This application-owned length describes the validated body
+                // before a web server may compress the browser response.
+                $response->headers->set('X-GoFormX-Export-Bytes', $length);
                 // Never forward an upstream filename or any arbitrary headers.
                 $response->headers->set('Content-Disposition', 'attachment; filename="goformx-submissions-' . $exportId . '.' . $extension . '"');
             }

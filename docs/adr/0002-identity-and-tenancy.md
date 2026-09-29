@@ -60,22 +60,27 @@ PHP preserves raw JSON numbers and repeated query/body fields for Go's validator
 never accessing the data-plane database or implementing another redactor.
 
 The released alpha.302 stream transport is configured before each upstream
-read. Form and submission JSON responses have a 1 MiB, ten-second budget;
-integration responses have a 256 KiB, ten-second budget; exports have an
-8 MiB, fifteen-second budget. Browser reads apply the same size limits while
-streaming and cancel over-limit bodies. Declared lengths must be valid and
-match the fully received body; an absent length is allowed for ordinary JSON
-and relies on the browser's HTTP framing checks. The export retains its
-stricter required-length contract. Mutation reads that fail remain uncertain
+read. Form and submission JSON responses have a 1 MiB body limit and ten-second
+idle-read timeout; integration responses have a 256 KiB limit and ten-second
+idle-read timeout; exports have an 8 MiB limit and fifteen-second idle-read
+timeout. These are not overall elapsed deadlines. Browser reads apply the same
+size limits to decoded streams and cancel over-limit bodies. A valid declared
+`Content-Length` must match received bytes only for identity responses: Fetch
+exposes the compressed wire length while delivering decoded bytes. An absent
+length is allowed for ordinary JSON and relies on browser HTTP framing checks.
+Mutation reads that fail remain uncertain
 until the user reconciles server state; no partial body is parsed or offered.
 
 Exports require a valid export UUID, JSON/CSV content type, and a declared
-`Content-Length` exactly matching the fully received bounded body. Missing or
-mismatched metadata fails without an attachment. This protects against the
+upstream `Content-Length` exactly matching the bounded body received by PHP.
+PHP also supplies `X-GoFormX-Export-Bytes`, the validated uncompressed byte
+count. The browser compares that count to its decoded response stream, including
+when a proxy compresses the wire response. Missing or mismatched metadata fails
+without an attachment. This protects against the
 current framework stream client's capped or interrupted reads (upstream
 [Waaseyaa #2708](https://github.com/waaseyaa/framework/issues/2708)). The transport
-allows fifteen seconds, leaving headroom beyond Go's ten-second export processing
-deadline. Response filenames
+allows fifteen seconds of read idleness, leaving headroom beyond Go's ten-second
+export processing deadline without imposing an overall PHP deadline. Response filenames
 are reconstructed from the validated UUID and media type; arbitrary upstream
 headers, cookies, and credentials are not forwarded. Responses are no-store and
 nosniff. No payload is logged or persisted by this controller.

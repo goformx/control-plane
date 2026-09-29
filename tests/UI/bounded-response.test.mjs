@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readBoundedResponse } from '../../ui/bounded-response.js';
 
-function response(chunks, length) {
+function response(chunks, length, encoding) {
   let reads = 0, cancelled = false;
   const body = new ReadableStream({
     pull(controller) {
@@ -11,7 +11,8 @@ function response(chunks, length) {
     },
     cancel() { cancelled = true; },
   });
-  return { value: { headers: new Headers(length === undefined ? {} : { 'Content-Length': length }), body },
+  return { value: { headers: new Headers({ ...(length === undefined ? {} : { 'Content-Length': length }),
+    ...(encoding === undefined ? {} : { 'Content-Encoding': encoding }) }), body },
     get reads() { return reads; }, get cancelled() { return cancelled; } };
 }
 
@@ -35,6 +36,16 @@ test('rejects advertised oversize before reading and streamed oversize early', a
 test('rejects false length and early EOF', async () => {
   await assert.rejects(readBoundedResponse(response(['abc'], 'bogus').value, 4), /length/);
   await assert.rejects(readBoundedResponse(response(['abc'], '4').value, 4), /incomplete/);
+});
+
+test('caps decoded gzip bytes without comparing them to compressed wire length', async () => {
+  assert.equal(await (await readBoundedResponse(response(['decoded'], '5', 'gzip').value, 7)).text(), 'decoded');
+  assert.equal(await (await readBoundedResponse(response(['ok'], '12', 'gzip').value, 2)).text(), 'ok');
+  const oversized = response(['abcd', 'ef', 'unread'], '3', 'gzip');
+  await assert.rejects(readBoundedResponse(oversized.value, 5), /size/);
+  assert.ok(oversized.reads < 3);
+  assert.equal(oversized.cancelled, true);
+  await assert.rejects(readBoundedResponse(response(['ok'], 'bad', 'gzip').value, 5), /length/);
 });
 
 test('propagates stream abort and cancels the reader', async () => {

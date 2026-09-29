@@ -94,7 +94,7 @@ final class AppServiceProvider extends ServiceProvider
             new OperationBudgetTransport(
                 new StreamHttpClient(timeout: 10.0, maxResponseBytes: 1024 * 1024),
                 new StreamHttpClient(timeout: 10.0, maxResponseBytes: 256 * 1024),
-                // Go's export deadline is ten seconds; the transport needs headroom.
+                // This is an idle read timeout, not an overall elapsed deadline.
                 new StreamHttpClient(timeout: 15.0, maxResponseBytes: 8 * 1024 * 1024),
             ),
         ));

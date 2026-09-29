@@ -79,7 +79,7 @@ export function initSubmissions({ context, verifyWorkspace }) {
     }
     const blob = await readBoundedResponse(response, download ? MAX_BYTES : MAX_JSON_BYTES);
     if (download) {
-      const id = response.headers.get('X-GoFormX-Export-ID'), length = response.headers.get('Content-Length');
+      const id = response.headers.get('X-GoFormX-Export-ID'), length = response.headers.get('X-GoFormX-Export-Bytes');
       const type = response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
       if (!UUID.test(id ?? '') || !/^[1-9][0-9]{0,7}$/.test(length ?? '') || Number(length) !== blob.size
           || type !== (body.format === 'csv' ? 'text/csv' : 'application/json')) throw new Error('Download integrity could not be verified. No file was offered.');
