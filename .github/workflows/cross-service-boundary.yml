@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        suite: [http, browser, integrations, authorization, failures]
+        suite: [http, browser, integrations, authorization, failures, account]
     services:
       postgres:
         image: postgres:17.11-alpine3.24@sha256:18cfe3ef5e6815560c98237d6216d1e5119702fb0f3894c8785dd58b8bbe5d73
@@ -43,6 +43,7 @@ jobs:
       GOFORMX_ASSERTION_ISSUER: https://goformx.com
       GOFORMX_ASSERTION_AUDIENCE: https://api.goformx.com
       GOFORMX_CROSS_SERVICE_UI_URL: http://127.0.0.1:18091
+      GOFORMX_ACCOUNT_UI_URL: http://127.0.0.1:18091
       GOFORMX_PUBLIC_API_URL: http://127.0.0.1:18090
       GOFORMX_WEBHOOK_RECEIVER_URL: https://receiver.goformx.test/hooks/goformx
       GOFORMX_WEBHOOK_RECEIVER_CONTROL_URL: http://127.0.0.1:18092
@@ -289,6 +290,12 @@ jobs:
           GOFORMX_EVIDENCE_USER: goformx
           GOFORMX_EVIDENCE_PASSWORD: cross-service-only
         run: npm run test:live:failures
+
+      - name: Exercise registration, verification, session and reset through a real browser
+        if: matrix.suite == 'account'
+        env:
+          GOFORMX_ACCOUNT_REHEARSAL: '1'
+        run: npm run test:live:account
 
       - name: Rehearse configured custody rotation and real process recovery
         if: matrix.suite == 'http'

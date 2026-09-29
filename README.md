@@ -90,7 +90,7 @@ Its verified-account fixtures do not replace the registration/reset/session
 release gate in #118. No browser storage state, account passwords, assertions,
 or raw credential-adjacent logs are published as test artifacts.
 
-Open `/register` to create an account. Registration starts an authenticated but unverified session; `/api/control-plane/context` remains unavailable until the verification link has been used. The first verified dashboard request idempotently provisions the account's personal organization.
+Open `/register` to create an account. The account cannot enter `/api/control-plane/context` until its email is verified. Verification leads to sign-in; the first authenticated dashboard request then idempotently provisions the account's personal organization.
 
 ## Architecture
 
