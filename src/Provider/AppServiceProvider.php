@@ -21,6 +21,7 @@ use App\Infrastructure\GoFormX\FirstPartyAssertionIssuer;
 use App\Infrastructure\GoFormX\JwksDocument;
 use App\Infrastructure\GoFormX\ManagementApiClient;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
+use App\Infrastructure\GoFormX\OperationBudgetTransport;
 use App\Infrastructure\GoFormX\SigningKey;
 use App\Infrastructure\Audit\AuthLifecycleAuditListener;
 use App\Entity\Organization;
@@ -90,8 +91,12 @@ final class AppServiceProvider extends ServiceProvider
         $this->singleton(ManagementApiClient::class, fn() => new ManagementApiClient(
             (string) ($this->config['goformx']['api_url'] ?? ''),
             $this->resolve(FirstPartyAssertionIssuer::class),
-            // Leave transport headroom beyond Go's ten-second export deadline.
-            new StreamHttpClient(timeout: 15.0, maxResponseBytes: 8 * 1024 * 1024),
+            new OperationBudgetTransport(
+                new StreamHttpClient(timeout: 10.0, maxResponseBytes: 1024 * 1024),
+                new StreamHttpClient(timeout: 10.0, maxResponseBytes: 256 * 1024),
+                // Go's export deadline is ten seconds; the transport needs headroom.
+                new StreamHttpClient(timeout: 15.0, maxResponseBytes: 8 * 1024 * 1024),
+            ),
         ));
         $this->singleton(ManagementApiClientInterface::class, fn() => $this->resolve(ManagementApiClient::class));
         $this->singleton(ManagementFormsController::class, fn() => new ManagementFormsController(

@@ -59,6 +59,16 @@ schema projection, redaction, resource bounds, and durable preparation audit.
 PHP preserves raw JSON numbers and repeated query/body fields for Go's validator,
 never accessing the data-plane database or implementing another redactor.
 
+The released alpha.302 stream transport is configured before each upstream
+read. Form and submission JSON responses have a 1 MiB, ten-second budget;
+integration responses have a 256 KiB, ten-second budget; exports have an
+8 MiB, fifteen-second budget. Browser reads apply the same size limits while
+streaming and cancel over-limit bodies. Declared lengths must be valid and
+match the fully received body; an absent length is allowed for ordinary JSON
+and relies on the browser's HTTP framing checks. The export retains its
+stricter required-length contract. Mutation reads that fail remain uncertain
+until the user reconciles server state; no partial body is parsed or offered.
+
 Exports require a valid export UUID, JSON/CSV content type, and a declared
 `Content-Length` exactly matching the fully received bounded body. Missing or
 mismatched metadata fails without an attachment. This protects against the

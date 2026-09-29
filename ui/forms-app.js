@@ -4,6 +4,7 @@ import { json } from '@codemirror/lang-json';
 import { requireJsonSupport } from './schema-json.js';
 import { initSubmissions } from './submissions-app.js';
 import { initIntegrations } from './integrations-app.js';
+import { readBoundedResponse } from './bounded-response.js';
 import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, parseSchema, parseJSON, stringify, publicEndpoints, starterSchema } from './forms-model.js';
 
 const $ = id => document.getElementById(id);
@@ -53,7 +54,7 @@ async function api(path, { method = 'GET', body, etag } = {}) {
   let response, payload;
   try {
     response = await fetch(path, { method, headers, credentials: 'same-origin', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(20_000), body: body === undefined ? undefined : stringify(body) });
-    payload = parseJSON(await response.text());
+    payload = parseJSON(await (await readBoundedResponse(response, 1024 * 1024)).text());
   } catch {
     if (method !== 'GET') state.uncertain = true;
     throw new Error(method === 'GET' ? 'Could not load the server response. Try Refresh; your edits are kept.' : 'The request may have succeeded. Your edits are kept. Reload and reconcile the server state before retrying; do not create or publish twice.');

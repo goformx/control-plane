@@ -1,3 +1,5 @@
+import { readBoundedResponse } from './bounded-response.js';
+
 export const TOKEN_SCOPES = ['forms:read', 'forms:write', 'forms:publish', 'submissions:read', 'tokens:read', 'tokens:write', 'webhooks:read', 'webhooks:write'];
 
 export function tokenRequest(name, scopes, days) {
@@ -67,8 +69,7 @@ export function initIntegrations({ context, verifyWorkspace }) {
       response = await fetch(path, { method, headers, credentials: 'same-origin', cache: 'no-store', redirect: 'error',
         signal: AbortSignal.any([controller.signal, AbortSignal.timeout(20_000)]), body: body === undefined ? undefined : JSON.stringify(body) });
       if (response.status === 204) { mutationPending = false; return null; }
-      const blob = await response.blob();
-      if (blob.size > 262144) throw new Error('Response too large');
+      const blob = await readBoundedResponse(response, 262144);
       payload = JSON.parse(await blob.text());
     } catch {
       uncertain ||= method !== 'GET';
