@@ -66,7 +66,7 @@ final readonly class ManagementSubmissionsController
             }
             $downstream = $this->client->request($operation->method(), $path,
                 $context->account->subjectId, $context->organization->organizationId,
-                [ManagementScope::SubmissionsRead], $body);
+                [ManagementScope::SubmissionsRead], $body, operationId: $operation->operationId());
             if (strlen($downstream->body) > self::MAX_RESPONSE_BYTES) {
                 throw new \UnexpectedValueException('Oversized management response.');
             }
@@ -95,6 +95,9 @@ final readonly class ManagementSubmissionsController
                 $response->headers->set('Content-Type', $type === 'text/csv' ? 'text/csv; charset=utf-8' : $type);
                 $response->headers->set('X-GoFormX-Export-ID', $exportId);
                 $response->headers->set('Content-Length', $length);
+                // This application-owned length describes the validated body
+                // before a web server may compress the browser response.
+                $response->headers->set('X-GoFormX-Export-Bytes', $length);
                 // Never forward an upstream filename or any arbitrary headers.
                 $response->headers->set('Content-Disposition', 'attachment; filename="goformx-submissions-' . $exportId . '.' . $extension . '"');
             }

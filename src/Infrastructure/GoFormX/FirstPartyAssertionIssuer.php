@@ -11,7 +11,7 @@ use Symfony\Component\Uid\Uuid;
 final readonly class FirstPartyAssertionIssuer
 {
     private const TYPE = 'gofx-fpa+jwt';
-    private const VERSION = 1;
+    private const VERSION = 2;
     private const LIFETIME_SECONDS = 60;
 
     public function __construct(
@@ -28,6 +28,7 @@ final readonly class FirstPartyAssertionIssuer
         string $subjectId,
         string $organizationId,
         array $scopes,
+        string $operationId,
         ?string $requestId = null,
         ?\DateTimeImmutable $now = null,
     ): IssuedAssertion {
@@ -36,6 +37,9 @@ final readonly class FirstPartyAssertionIssuer
         }
         if ($scopes === []) {
             throw new \InvalidArgumentException('At least one management scope is required.');
+        }
+        if (preg_match('/\A[A-Za-z][A-Za-z0-9]{0,63}\z/', $operationId) !== 1) {
+            throw new \InvalidArgumentException('The management operation must be a canonical operation id.');
         }
         $scopeValues = [];
         foreach ($scopes as $scope) {
@@ -63,6 +67,7 @@ final readonly class FirstPartyAssertionIssuer
             'sub' => $subjectId,
             'org' => $organizationId,
             'scp' => array_keys($scopeValues),
+            'op' => $operationId,
             'iat' => $now->getTimestamp(),
             'nbf' => $now->getTimestamp(),
             'exp' => $expiresAt->getTimestamp(),

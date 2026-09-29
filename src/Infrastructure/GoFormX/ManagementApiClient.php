@@ -45,6 +45,7 @@ final readonly class ManagementApiClient implements ManagementApiClientInterface
         ?string $requestId = null,
         ?string $ifMatch = null,
         RequestMediaType $mediaType = RequestMediaType::Json,
+        ?string $operationId = null,
     ): HttpResponse {
         if (preg_match('#\A/v1(?:/|\z)#', $path) !== 1 || str_contains($path, '..') ||
             preg_match('/[\x00-\x1f\x7f#]/', $path) === 1) {
@@ -53,7 +54,10 @@ final readonly class ManagementApiClient implements ManagementApiClientInterface
         if ($ifMatch !== null && !EntityTag::isStrong($ifMatch)) {
             throw new \InvalidArgumentException('If-Match must contain one bounded strong entity tag.');
         }
-        $issued = $this->assertions->issue($subjectId, $organizationId, $scopes, $requestId);
+        if ($operationId === null) {
+            throw new \InvalidArgumentException('A server-selected management operation is required.');
+        }
+        $issued = $this->assertions->issue($subjectId, $organizationId, $scopes, $operationId, $requestId);
 
         $headers = [
             'Accept' => 'application/json',

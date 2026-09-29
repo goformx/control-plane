@@ -1,7 +1,9 @@
 import { parseJSON, stringify } from './schema-json.js';
+import { readBoundedResponse } from './bounded-response.js';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_BYTES = 8 * 1024 * 1024;
+const MAX_JSON_BYTES = 1024 * 1024;
 const PAGE_SIZE = 25;
 
 export function submissionFilters(values) {
@@ -75,10 +77,9 @@ export function initSubmissions({ context, verifyWorkspace }) {
         503: 'Submission operations are unavailable. No download was released.', 504: 'Export timed out. Narrow the filters and retry.' };
       throw new Error(messages[response.status] ?? 'Could not load submissions. Retry when the service is available.');
     }
-    const blob = await response.blob();
-    if (blob.size > MAX_BYTES) throw new Error('The response exceeds the supported size. Narrow the filters.');
+    const blob = await readBoundedResponse(response, download ? MAX_BYTES : MAX_JSON_BYTES);
     if (download) {
-      const id = response.headers.get('X-GoFormX-Export-ID'), length = response.headers.get('Content-Length');
+      const id = response.headers.get('X-GoFormX-Export-ID'), length = response.headers.get('X-GoFormX-Export-Bytes');
       const type = response.headers.get('Content-Type')?.split(';')[0].trim().toLowerCase();
       if (!UUID.test(id ?? '') || !/^[1-9][0-9]{0,7}$/.test(length ?? '') || Number(length) !== blob.size
           || type !== (body.format === 'csv' ? 'text/csv' : 'application/json')) throw new Error('Download integrity could not be verified. No file was offered.');

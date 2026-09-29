@@ -9,6 +9,7 @@ const suites = new Map([
   ['integrations-', { script: 'test:live:integrations', matrix: 'integrations' }],
   ['authorization-', { script: 'test:live:authorization', matrix: 'authorization' }],
   ['failures-', { script: 'test:live:failures', matrix: 'failures' }],
+  ['account-', { script: 'test:live:account', matrix: 'account' }],
 ]);
 for (const file of files) {
   const matches = [...suites.keys()].filter(prefix => file.startsWith(prefix));

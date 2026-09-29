@@ -30,6 +30,7 @@ final class ManagementApiClientTest extends TestCase
             '22222222-2222-4222-8222-222222222222',
             [ManagementScope::FormsRead],
             requestId: '44444444-4444-4444-8444-444444444444',
+            operationId: 'listForms',
         );
 
         self::assertSame(200, $response->statusCode);
@@ -37,6 +38,26 @@ final class ManagementApiClientTest extends TestCase
         self::assertStringStartsWith('Bearer ', $transport->headers['Authorization']);
         self::assertSame('44444444-4444-4444-8444-444444444444', $transport->headers['X-Trace-Id']);
         self::assertStringNotContainsString($transport->headers['Authorization'], $response->body);
+        $parts = explode('.', substr($transport->headers['Authorization'], 7));
+        $claims = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true, flags: JSON_THROW_ON_ERROR);
+        self::assertSame('listForms', $claims['op']);
+        self::assertSame(2, $claims['ver']);
+    }
+
+    public function testItRejectsMissingServerSelectedOperationBeforeTransport(): void
+    {
+        $transport = new RecordingHttpClient();
+        $client = new ManagementApiClient('https://api.goformx.com', new FirstPartyAssertionIssuer(
+            'https://goformx.com', 'https://api.goformx.com',
+            SigningKey::fromBase64Seed('active', base64_encode(str_repeat("\x66", 32))),
+        ), $transport);
+        try {
+            $client->request('GET', '/v1/forms', '11111111-1111-4111-8111-111111111111',
+                '22222222-2222-4222-8222-222222222222', [ManagementScope::FormsRead]);
+            self::fail('A missing operation must fail before signing or transport.');
+        } catch (\InvalidArgumentException) {
+            self::assertSame('', $transport->url);
+        }
     }
 
     public function testItRejectsAnArbitraryOrTraversalTarget(): void
@@ -68,7 +89,8 @@ final class ManagementApiClientTest extends TestCase
         $body = '{"title":"Updated","schema":{"properties":{}}}';
         $client->request('PATCH', '/v1/forms/33333333-3333-4333-8333-333333333333',
             '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-            [ManagementScope::FormsWrite], $body, ifMatch: '"form-current"', mediaType: \App\Domain\GoFormX\RequestMediaType::MergePatch);
+            [ManagementScope::FormsWrite], $body, ifMatch: '"form-current"', mediaType: \App\Domain\GoFormX\RequestMediaType::MergePatch,
+            operationId: 'updateForm');
         self::assertSame('application/merge-patch+json', $transport->headers['Content-Type']);
         self::assertSame('"form-current"', $transport->headers['If-Match']);
         self::assertSame($body, $transport->body);
@@ -76,7 +98,7 @@ final class ManagementApiClientTest extends TestCase
         $transport->url = '';
         $client->request('PATCH', '/v1/forms/33333333-3333-4333-8333-333333333333/webhook',
             '11111111-1111-4111-8111-111111111111', '22222222-2222-4222-8222-222222222222',
-            [ManagementScope::WebhooksWrite], '{"enabled":false}');
+            [ManagementScope::WebhooksWrite], '{"enabled":false}', operationId: 'patchWebhookEndpoint');
         self::assertSame('application/json', $transport->headers['Content-Type']);
         self::assertArrayNotHasKey('If-Match', $transport->headers);
         $transport->url = '';

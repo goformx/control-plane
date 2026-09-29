@@ -33,6 +33,20 @@ enum IntegrationOperation: string
         };
     }
 
+    public function operationId(): string
+    {
+        return match ($this) {
+            self::Tokens => 'listServiceTokens',
+            self::CreateToken => 'createServiceToken',
+            self::RevokeToken => 'revokeServiceToken',
+            self::Webhook => 'getWebhookEndpoint',
+            self::PutWebhook => 'putWebhookEndpoint',
+            self::PatchWebhook => 'patchWebhookEndpoint',
+            self::DeleteWebhook => 'deleteWebhookEndpoint',
+            self::ReplayDelivery => 'replayWebhookDelivery',
+        };
+    }
+
     public function template(): string
     {
         return match ($this) {

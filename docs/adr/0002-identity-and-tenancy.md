@@ -59,13 +59,28 @@ schema projection, redaction, resource bounds, and durable preparation audit.
 PHP preserves raw JSON numbers and repeated query/body fields for Go's validator,
 never accessing the data-plane database or implementing another redactor.
 
+The released alpha.302 stream transport is configured before each upstream
+read. Form and submission JSON responses have a 1 MiB body limit and ten-second
+idle-read timeout; integration responses have a 256 KiB limit and ten-second
+idle-read timeout; exports have an 8 MiB limit and fifteen-second idle-read
+timeout. These are not overall elapsed deadlines. Browser reads apply the same
+size limits to decoded streams and cancel over-limit bodies. A valid declared
+`Content-Length` must match received bytes only for identity responses: Fetch
+exposes the compressed wire length while delivering decoded bytes. An absent
+length is allowed for ordinary JSON and relies on browser HTTP framing checks.
+Mutation reads that fail remain uncertain
+until the user reconciles server state; no partial body is parsed or offered.
+
 Exports require a valid export UUID, JSON/CSV content type, and a declared
-`Content-Length` exactly matching the fully received bounded body. Missing or
-mismatched metadata fails without an attachment. This protects against the
+upstream `Content-Length` exactly matching the bounded body received by PHP.
+PHP also supplies `X-GoFormX-Export-Bytes`, the validated uncompressed byte
+count. The browser compares that count to its decoded response stream, including
+when a proxy compresses the wire response. Missing or mismatched metadata fails
+without an attachment. This protects against the
 current framework stream client's capped or interrupted reads (upstream
 [Waaseyaa #2708](https://github.com/waaseyaa/framework/issues/2708)). The transport
-allows fifteen seconds, leaving headroom beyond Go's ten-second export processing
-deadline. Response filenames
+allows fifteen seconds of read idleness, leaving headroom beyond Go's ten-second
+export processing deadline without imposing an overall PHP deadline. Response filenames
 are reconstructed from the validated UUID and media type; arbitrary upstream
 headers, cookies, and credentials are not forwarded. Responses are no-store and
 nosniff. No payload is logged or persisted by this controller.
@@ -96,7 +111,18 @@ organization headers are not authority. Go checks resource ownership again.
 
 Token creation is delegation, not a blanket privileged assertion. The server
 validates the selected scopes against the canonical enum, rejects duplicates and
-unknown scopes, and signs only `tokens:write` plus the selected scopes. Go remains
+unknown scopes, and signs only `tokens:write` plus the selected scopes. The v2
+first-party assertion also signs the canonical OpenAPI operation ID selected by
+the server-side operation enum. A `createServiceToken` assertion cannot authorize
+form reads or token revocation even when its scope set contains those scopes.
+Go rejects an assertion used on another route
+before consuming its replay ID or invoking a handler. The v1 assertion profile
+is rejected after this coordinated control-plane and Go change; it must not be
+kept as a token-mint fallback. An assertion does not bind the request body, so
+Go still limits newly issued token scopes to those present in the assertion,
+with organization ownership and one-use replay enforced. This residual authority
+is accepted for the server-only, at-most-60-second issuance path; no assertion
+enters browser code or a generated site integration. Go remains
 the authority for token validation, persistence, audit, expiry and revocation.
 `tokens:write` is an explicitly selectable powerful scope: integrations holding it
 can mint/revoke tokens within their own authority. Admins share this integration

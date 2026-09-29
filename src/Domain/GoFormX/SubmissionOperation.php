@@ -20,6 +20,16 @@ enum SubmissionOperation: string
         return $this === self::Export ? 'POST' : 'GET';
     }
 
+    public function operationId(): string
+    {
+        return match ($this) {
+            self::List => 'listSubmissions',
+            self::Get => 'getSubmission',
+            self::Export => 'exportSubmissions',
+            self::Deliveries => 'listWebhookDeliveries',
+        };
+    }
+
     public function allowedFor(OrganizationRole $role): bool
     {
         return in_array($role, [OrganizationRole::Owner, OrganizationRole::Admin], true);

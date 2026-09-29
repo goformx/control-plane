@@ -11,7 +11,7 @@
         "ext-sqlite3": "*",
         "ext-zip": "*",
         "symfony/dotenv": "^8.0",
-        "waaseyaa/framework": "0.1.0-alpha.299"
+        "waaseyaa/framework": "0.1.0-alpha.302"
     },
     "autoload": {
         "psr-4": {

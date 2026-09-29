@@ -23,6 +23,7 @@ final class FirstPartyAssertionIssuerTest extends TestCase
             '11111111-1111-4111-8111-111111111111',
             '22222222-2222-4222-8222-222222222222',
             [ManagementScope::FormsRead, ManagementScope::FormsWrite],
+            'listForms',
             $requestId,
             $now,
         );
@@ -34,10 +35,11 @@ final class FirstPartyAssertionIssuerTest extends TestCase
         self::assertSame('https://goformx.com', $claims['iss']);
         self::assertSame('https://api.goformx.com', $claims['aud']);
         self::assertSame(['forms:read', 'forms:write'], $claims['scp']);
+        self::assertSame('listForms', $claims['op']);
         self::assertSame($claims['iat'], $claims['nbf']);
         self::assertSame(60, $claims['exp'] - $claims['iat']);
         self::assertSame($requestId, $claims['rid']);
-        self::assertSame(1, $claims['ver']);
+        self::assertSame(2, $claims['ver']);
         self::assertSame($claims['jti'], $issued->assertionId);
         self::assertSame('2026-08-29T22:01:00+00:00', $issued->expiresAt->format(DATE_ATOM));
 
@@ -60,6 +62,7 @@ final class FirstPartyAssertionIssuerTest extends TestCase
             '11111111-1111-4111-8111-111111111111',
             '22222222-2222-4222-8222-222222222222',
             [ManagementScope::FormsRead, ManagementScope::FormsRead],
+            'listForms',
         );
     }
 

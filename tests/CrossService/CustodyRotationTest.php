@@ -91,14 +91,17 @@ final class CustodyRotationTest extends TestCase
         $snapshot = $this->publish($old);
         $this->startGo($snapshot);
         $this->expectRead($old, 200);
-        $createdForm = $this->request(self::API . '/v1/forms', 'POST', $this->issue($old, ['forms:write']), [
+        $createdForm = $this->request(self::API . '/v1/forms', 'POST', $this->issue($old, ['forms:write'], operation: 'createForm'), [
             'name' => 'custody-' . bin2hex(random_bytes(6)), 'title' => 'Disposable custody rehearsal',
             'schema' => ['$schema' => 'https://json-schema.org/draft/2020-12/schema', 'type' => 'object',
                 'properties' => ['message' => ['type' => 'string']]],
         ]);
         self::assertSame(201, $createdForm['status']);
         $formId = json_decode($createdForm['body'], true, 32, JSON_THROW_ON_ERROR)['data']['id'];
-        $created = $this->request(self::API . '/v1/service-tokens', 'POST', $this->issue($old, ['tokens:write', 'forms:read']), [
+        $mintAssertion = $this->issue($old, ['tokens:write', 'forms:read'], operation: 'createServiceToken');
+        self::assertSame(401, $this->request(self::API . '/v1/forms', 'GET', $mintAssertion)['status']);
+        self::assertSame(401, $this->request(self::API . '/v1/service-tokens/0000000000000000', 'DELETE', $mintAssertion)['status']);
+        $created = $this->request(self::API . '/v1/service-tokens', 'POST', $mintAssertion, [
             'name' => 'disposable-custody-rehearsal', 'scopes' => ['forms:read'], 'expiresInSeconds' => 300,
         ]);
         self::assertSame(201, $created['status']);
@@ -164,9 +167,9 @@ final class CustodyRotationTest extends TestCase
         $this->expectRead($replacement, 200);
         $this->expectRead($next, 401);
         self::assertSame(403, $this->request(self::API . '/v1/forms', 'GET', $this->issue($replacement, ['forms:write']))['status']);
-        self::assertSame(200, $this->request(self::API . '/v1/forms/' . $formId, 'GET', $this->issue($replacement))['status']);
+        self::assertSame(200, $this->request(self::API . '/v1/forms/' . $formId, 'GET', $this->issue($replacement, operation: 'getForm'))['status']);
         self::assertSame(404, $this->request(self::API . '/v1/forms/' . $formId, 'GET',
-            $this->issue($replacement, ['forms:read'], Uuid::v4()->toRfc4122()))['status']);
+            $this->issue($replacement, ['forms:read'], Uuid::v4()->toRfc4122(), 'getForm'))['status']);
         $this->record('recovery snapshot survives process restart and discovery outage; replay remains consumed');
 
         $this->publish($replacement, [$this->publicKey($old, 'revoked'), $this->publicKey($next, 'revoked')]);
@@ -245,10 +248,12 @@ final class CustodyRotationTest extends TestCase
     }
 
     /** @param array<string, string> $custody @param list<string> $scopes */
-    private function issue(#[\SensitiveParameter] array $custody, array $scopes = ['forms:read'], ?string $organization = null): string
+    private function issue(#[\SensitiveParameter] array $custody, array $scopes = ['forms:read'], ?string $organization = null,
+        string $operation = 'listForms'): string
     {
         $compact = $this->execute([PHP_BINARY, 'tests/CrossService/fixtures/issue-assertion.php'], $this->phpEnvironment() + $custody,
-            json_encode(['subject' => $this->subject, 'organization' => $organization ?? $this->organization, 'scopes' => $scopes], JSON_THROW_ON_ERROR));
+            json_encode(['subject' => $this->subject, 'organization' => $organization ?? $this->organization,
+                'scopes' => $scopes, 'operation' => $operation], JSON_THROW_ON_ERROR));
         self::assertTrue(preg_match('/\AeyJ[A-Za-z0-9_-]*\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\z/', $compact) === 1, 'Configured issuer must return one compact assertion.');
         $this->sensitive[] = $compact;
         return $compact;
