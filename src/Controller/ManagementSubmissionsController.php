@@ -66,7 +66,7 @@ final readonly class ManagementSubmissionsController
             }
             $downstream = $this->client->request($operation->method(), $path,
                 $context->account->subjectId, $context->organization->organizationId,
-                [ManagementScope::SubmissionsRead], $body);
+                [ManagementScope::SubmissionsRead], $body, operationId: $operation->operationId());
             if (strlen($downstream->body) > self::MAX_RESPONSE_BYTES) {
                 throw new \UnexpectedValueException('Oversized management response.');
             }

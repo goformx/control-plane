@@ -28,6 +28,20 @@ enum FormOperation: string
         };
     }
 
+    public function operationId(): string
+    {
+        return match ($this) {
+            self::List => 'listForms',
+            self::Create => 'createForm',
+            self::Get => 'getForm',
+            self::Update => 'updateForm',
+            self::ListVersions => 'listSchemaVersions',
+            self::CreateVersion => 'createSchemaVersion',
+            self::GetVersion => 'getSchemaVersion',
+            self::PublishVersion => 'publishSchemaVersion',
+        };
+    }
+
     public function scope(): ManagementScope
     {
         return match ($this) {

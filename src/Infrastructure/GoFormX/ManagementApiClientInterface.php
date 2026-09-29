@@ -24,5 +24,6 @@ interface ManagementApiClientInterface
         ?string $requestId = null,
         ?string $ifMatch = null,
         RequestMediaType $mediaType = RequestMediaType::Json,
+        ?string $operationId = null,
     ): HttpResponse;
 }

@@ -51,7 +51,8 @@ final readonly class ManagementIntegrationsController
             }
             $scopes = $operation->scopes($body);
             $downstream = $this->client->request($operation->method(), $path, $context->account->subjectId,
-                $context->organization->organizationId, $scopes, $body, mediaType: RequestMediaType::Json);
+                $context->organization->organizationId, $scopes, $body, mediaType: RequestMediaType::Json,
+                operationId: $operation->operationId());
             if (strlen($downstream->body) > 262144) { throw new \UnexpectedValueException(); }
             $headers = array_change_key_case($downstream->headers, CASE_LOWER);
             if ($downstream->statusCode >= 400) {

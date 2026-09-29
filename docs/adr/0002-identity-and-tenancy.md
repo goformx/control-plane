@@ -111,7 +111,18 @@ organization headers are not authority. Go checks resource ownership again.
 
 Token creation is delegation, not a blanket privileged assertion. The server
 validates the selected scopes against the canonical enum, rejects duplicates and
-unknown scopes, and signs only `tokens:write` plus the selected scopes. Go remains
+unknown scopes, and signs only `tokens:write` plus the selected scopes. The v2
+first-party assertion also signs the canonical OpenAPI operation ID selected by
+the server-side operation enum. A `createServiceToken` assertion cannot authorize
+form reads or token revocation even when its scope set contains those scopes.
+Go rejects an assertion used on another route
+before consuming its replay ID or invoking a handler. The v1 assertion profile
+is rejected after this coordinated control-plane and Go change; it must not be
+kept as a token-mint fallback. An assertion does not bind the request body, so
+Go still limits newly issued token scopes to those present in the assertion,
+with organization ownership and one-use replay enforced. This residual authority
+is accepted for the server-only, at-most-60-second issuance path; no assertion
+enters browser code or a generated site integration. Go remains
 the authority for token validation, persistence, audit, expiry and revocation.
 `tokens:write` is an explicitly selectable powerful scope: integrations holding it
 can mint/revoke tokens within their own authority. Admins share this integration

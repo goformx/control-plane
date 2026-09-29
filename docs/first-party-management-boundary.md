@@ -12,6 +12,7 @@ The accepted values are fixed:
 - audience: `https://api.goformx.com`
 - algorithm: EdDSA with Ed25519
 - protected type: `gofx-fpa+jwt`
+- claim profile: v2 with a signed canonical OpenAPI `op` operation ID; v1 is rejected by the paired Go verifier
 - assertion lifetime: 60 seconds
 
 Local API transport may use an explicit loopback HTTP origin. Non-loopback deployments require HTTPS.
@@ -20,7 +21,7 @@ Local API transport may use an explicit loopback HTTP origin. Non-loopback deplo
 
 The application exposes the eight canonical form operations under `/api/control-plane/forms`: list/create, get/metadata update, version list/create/get, and explicit version publication. `FormOperation` defines their method/path/scope mapping; the cross-service gate checks that inventory against the pinned Go OpenAPI. The [application role policy](adr/0002-identity-and-tenancy.md#form-operation-authorization) is checked against a freshly resolved membership before any credential is issued.
 
-The browser sends session cookies and an `X-XSRF-TOKEN` for writes, never a Go assertion. JSON writes use `application/json`; metadata PATCH uses `application/merge-patch+json` and requires the last observed strong `ETag` as `If-Match`. Response status, body, validated ETag, and correlation ID survive the boundary; authorization and other arbitrary upstream headers do not. Requests are bounded to the Go contract's 1 MiB limit, and schema JSON is forwarded verbatim to preserve objects and scalar representations. Signing/configuration failures return a generic `503`, not a misleading browser-input error with internal diagnostics.
+The browser sends session cookies and an `X-XSRF-TOKEN` for writes, never a Go assertion. The server-selected operation enum supplies `op`; browser input cannot choose it. Go checks the signed claim against the matched route before replay consumption, so a token-creation assertion cannot authorize another operation even when its scopes would otherwise permit it. JSON writes use `application/json`; metadata PATCH uses `application/merge-patch+json` and requires the last observed strong `ETag` as `If-Match`. Response status, body, validated ETag, and correlation ID survive the boundary; authorization and other arbitrary upstream headers do not. Requests are bounded to the Go contract's 1 MiB limit, and schema JSON is forwarded verbatim to preserve objects and scalar representations. Signing/configuration failures return a generic `503`, not a misleading browser-input error with internal diagnostics.
 
 ## Rotation
 

@@ -69,6 +69,7 @@ final readonly class ManagementFormsController
                 $body,
                 ifMatch: $ifMatch,
                 mediaType: $operation === FormOperation::Update ? RequestMediaType::MergePatch : RequestMediaType::Json,
+                operationId: $operation->operationId(),
             );
             $assertionFailure = $downstream->statusCode === 401;
             $response = $assertionFailure ? $this->error(502, 'Bad Gateway',

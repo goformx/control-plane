@@ -6,6 +6,8 @@ namespace App\Tests\CrossService;
 
 use App\Domain\GoFormX\ManagementScope;
 use App\Domain\GoFormX\FormOperation;
+use App\Domain\GoFormX\IntegrationOperation;
+use App\Domain\GoFormX\SubmissionOperation;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
 use PHPUnit\Framework\TestCase;
 use Waaseyaa\Entity\EntityInterface;
@@ -150,29 +152,35 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
         }
     }
 
-    public function testFormOperationScopesMatchThePinnedCanonicalOpenApi(): void
+    public function testManagementOperationsMatchThePinnedCanonicalOpenApi(): void
     {
         $path = getenv('GOFORMX_CONTRACT_PATH') ?: dirname(__DIR__, 2) . '/.ci/goformx/goforms/contracts/openapi.v1.yaml';
         self::assertFileExists($path);
         $contract = Yaml::parseFile($path);
         $expected = [];
         foreach ($contract['paths'] as $path => $methods) {
-            if (preg_match('~\A/v1/forms(?:/\{formId\}(?:/versions(?:/\{version\}(?:/publish)?)?)?)?\z~', $path) !== 1) {
-                continue;
-            }
             foreach ($methods as $method => $specification) {
-                if (isset($specification['operationId'])) {
-                    $expected[strtoupper($method) . ' ' . $path] = $specification['x-goformx-required-scopes'];
+                if (isset($specification['x-goformx-required-scopes'])) {
+                    $expected[strtoupper($method) . ' ' . $path] = [
+                        $specification['operationId'],
+                        $specification['x-goformx-required-scopes'],
+                    ];
                 }
             }
         }
         $actual = [];
         foreach (FormOperation::cases() as $operation) {
-            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->scope()->value];
+            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [$operation->scope()->value]];
+        }
+        foreach (SubmissionOperation::cases() as $operation) {
+            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [ManagementScope::SubmissionsRead->value]];
+        }
+        foreach (IntegrationOperation::cases() as $operation) {
+            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [$operation->scope()->value]];
         }
         ksort($expected);
         ksort($actual);
-        self::assertCount(8, $expected);
+        self::assertCount(20, $expected);
         self::assertSame($expected, $actual);
     }
 
@@ -290,7 +298,7 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
                 'required' => ['message'],
                 'additionalProperties' => false,
             ],
-        ]);
+        ], operationId: 'createForm');
         self::assertSame(201, $created->statusCode, $created->body);
 
         return $this->resourceId($created->body);

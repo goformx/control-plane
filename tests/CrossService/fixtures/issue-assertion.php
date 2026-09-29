@@ -22,6 +22,7 @@ try {
         $input['subject'],
         $input['organization'],
         array_map(ManagementScope::from(...), $input['scopes']),
+        $input['operation'],
     );
     // The parent captures this private pipe, never console output or an artifact.
     fwrite(STDOUT, $assertion->compact);
