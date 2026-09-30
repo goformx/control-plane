@@ -20,6 +20,11 @@ return [
     // requests carrying an existing session cookie still resume normally.
     'session' => [
         'stateless_paths' => ['/.well-known/goformx-control-plane-jwks.json'],
+        // The FPM hop is plain HTTP behind the TLS-terminating ingress. Never
+        // infer production cookie security from that hop's request scheme.
+        'cookie' => [
+            'secure' => !in_array(getenv('APP_ENV') ?: 'production', ['local', 'dev', 'development', 'test', 'testing'], true),
+        ],
     ],
 
     // RFC 9727 API Catalog. The public route exists only when a canonical
