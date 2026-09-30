@@ -217,7 +217,9 @@ final class CustodyRotationTest extends TestCase
         return json_encode($document, JSON_THROW_ON_ERROR);
     }
 
-    private function startGo(string $snapshot, bool $enabled = true, string $discovery = ''): void
+    // An empty setting falls back to production discovery in Viper. Pin every
+    // rehearsal restart locally so the scheduled refresh cannot import live keys.
+    private function startGo(string $snapshot, bool $enabled = true, string $discovery = 'https://127.0.0.1:18093/.well-known/goformx-control-plane-jwks.json'): void
     {
         $this->stop('go');
         $this->start('go', [$this->binary], $this->runtime + [
