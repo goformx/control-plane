@@ -1,0 +1,22 @@
+name: Image packaging
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  context-and-layers:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Build images and scan every layer for synthetic local data
+        run: python3 scripts/verify-image-context.py
+      - name: Check PHP runtime requirements
+        run: docker run --rm goformx-control-plane-production:context-probe composer check-platform-reqs --no-dev
+      - name: Check routed production login and cookies
+        run: sh scripts/verify-proxy-cookie.sh

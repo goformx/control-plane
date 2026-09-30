@@ -21,6 +21,27 @@ Runtime configuration is supplied through environment variables. `APP_URL` is th
 
 Production registration defaults to `admin` (closed). Configure `SENDGRID_API_KEY`, `GOFORMX_MAIL_FROM_ADDRESS`, and an optional `GOFORMX_MAIL_FROM_NAME`, verify delivery, and only then set `GOFORMX_REGISTRATION_MODE=open`. Local development defaults to open registration and logs verification/reset URLs when mail is absent.
 
+## Production image boot
+
+The PHP image requires a migrated SQLite database on the persistent
+`/app/storage` volume before serving traffic. Run the supported Waaseyaa
+`install:init` command as a separate maintenance step against that same volume
+after the backup and migration gates are accepted. The image entrypoint runs
+`field-access:preflight --write-artifact` against the live database before it
+starts PHP-FPM. Waaseyaa binds the result to the installed framework and schema.
+If the database is absent, incompatible, or not ready, the container exits
+without accepting requests. The artifact lives in the container's root-owned
+`.waaseyaa` directory and is regenerated on every container start; it is not
+copied from another database or preserved as a release artifact.
+
+The FPM supervisor owns the preflight write and request workers run as
+`www-data`. The web image's `/healthz` is only Nginx liveness. Deployment
+readiness must route `/login` through Nginx and FPM and require HTTP 200, then
+check application and database operations before sending public traffic.
+The disposable smoke is `sh scripts/verify-proxy-cookie.sh` after both images
+are built. A successful image smoke does not replace capacity, mail, restore,
+migration, or rollback acceptance.
+
 ## Production topology
 
 Cloudflare terminates public DNS. The Raspberry Pi ingress routes `goformx.com` to this Waaseyaa application and preserves `api.goformx.com` for the Go service. Application storage is a local SQLite volume included in the encrypted/offsite backup procedure. Deployments run migrations before traffic and retain the previous application artifact for rollback.
