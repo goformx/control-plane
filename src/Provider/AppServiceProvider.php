@@ -7,6 +7,8 @@ namespace App\Provider;
 use App\Controller\AuthPageController;
 use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
+use App\Site\PublicWebsiteSitemap;
+use Waaseyaa\Seo\Discovery\SitemapContributorInterface;
 use App\Controller\ManagementFormsController;
 use App\Controller\ManagementSubmissionsController;
 use App\Controller\ManagementSitesController;
@@ -49,6 +51,10 @@ final class AppServiceProvider extends ServiceProvider
 {
     public function register(): void
     {
+        $this->singleton(SitemapContributorInterface::class, fn() => new PublicWebsiteSitemap());
+        $this->singleton(HomeController::class, fn() => new HomeController(
+            (string) ($this->config['api_catalog']['base_url'] ?? ''),
+        ));
         $this->singleton(AuthPageController::class, fn() => new AuthPageController(
             (string) $this->config['goformx']['public_api_url'],
             (bool) ($this->config['auth']['require_verified_email'] ?? true),
@@ -138,11 +144,17 @@ final class AppServiceProvider extends ServiceProvider
         $router->addRoute(
             'home',
             RouteBuilder::create('/')
-                ->controller([HomeController::class, 'index'])
+                ->controller(fn() => $this->resolve(HomeController::class)->index())
                 ->allowAll()
                 ->methods('GET')
                 ->build(),
         );
+
+        foreach (['getting-started' => 'gettingStarted', 'compatibility' => 'compatibility', 'docs' => 'docs'] as $path => $method) {
+            $router->addRoute('goformx.public.' . $path, RouteBuilder::create('/' . $path)
+                ->controller(fn() => $this->resolve(HomeController::class)->{$method}())
+                ->allowAll()->methods('GET')->build());
+        }
 
         $pages = [
             'register' => ['register', false],

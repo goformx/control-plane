@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ TITLE }}</title>
+  <meta name="description" content="{{ DESCRIPTION }}">
+  <link rel="canonical" href="{{ CANONICAL }}">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="{{ TITLE }}">
+  <meta property="og:description" content="{{ DESCRIPTION }}">
+  <meta property="og:url" content="{{ CANONICAL }}">
+  <meta property="og:image" content="{{ ORIGIN }}/assets/website-og.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="GoFormX. One home for your forms. Developer preview, Codex first.">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="/assets/website-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/assets/website.css">
+  <script src="/assets/website.js" defer></script>
+</head>
+<body class="public-site">
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header wrap">
+    <a class="wordmark" href="/" aria-label="GoFormX home">GoForm<span>X</span></a>
+    <button class="menu-toggle" type="button" aria-expanded="false" aria-controls="public-nav" hidden>Menu <span aria-hidden="true">+</span></button>
+    <nav id="public-nav" class="public-nav" aria-label="Primary navigation">
+      <a href="/#how-it-works">How it works</a>
+      <a href="/compatibility" {{ COMPATIBILITY_CURRENT }}>Compatibility</a>
+      <a href="/docs" {{ DOCS_CURRENT }}>Docs</a>
+      <a class="sign-in" href="/login">Sign in</a>
+      <a class="button compact" href="/getting-started" {{ START_CURRENT }}>Get started</a>
+    </nav>
+  </header>
+  <main id="main" tabindex="-1">{{ CONTENT }}</main>
+  <footer class="site-footer wrap">
+    <a class="wordmark" href="/" aria-label="GoFormX home">GoForm<span>X</span></a>
+    <nav aria-label="Footer navigation"><a href="/docs">Documentation</a><a href="https://github.com/goformx/goformx">GitHub</a><a href="/login">Sign in</a></nav>
+    <p class="footer-note">Developer preview. See <a href="/compatibility">verified scope and limitations</a>.</p>
+  </footer>
+</body>
+</html>
