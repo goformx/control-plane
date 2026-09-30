@@ -42,15 +42,17 @@ The disposable smoke is `sh scripts/verify-proxy-cookie.sh` after both images
 are built. A successful image smoke does not replace capacity, mail, restore,
 migration, or rollback acceptance.
 
-The `www` FPM pool terminates a worker after 25 seconds of total request
-occupancy, including work after `fastcgi_finish_request()` and shutdown
-functions. This is a hard backstop: a request in progress can end abruptly,
+The `www` FPM pool has a 25-second request-termination setting, including
+work after `fastcgi_finish_request()` and shutdown functions. This is a hard
+backstop, with some scheduling delay before FPM kills the worker: a request in
+progress can end abruptly,
 and it is not a graceful deadline for the Go API or a promise of a complete
 browser response. Nginx's 30-second FastCGI read timeout only limits idle
 reads; a slow-drip response can otherwise run indefinitely. The routed
-`sh scripts/verify-worker-bound.sh` smoke checks termination during a drip,
-recovery, and a concurrent 8 MiB response. It mounts its test script at
-runtime; no test endpoint is included in the production image.
+`sh scripts/verify-worker-bound.sh` smoke checks termination while FPM reads
+a one-second upstream drip from a second disposable PHP container, recovery,
+and a concurrent 8 MiB response. It mounts both test scripts at runtime; no
+test endpoint is included in the production image.
 
 ## Production topology
 

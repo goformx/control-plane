@@ -8,9 +8,10 @@ network="goformx-worker-smoke-$suffix"
 volume="goformx-worker-smoke-$suffix"
 php="goformx-worker-php-$suffix"
 web="goformx-worker-web-$suffix"
+upstream="goformx-worker-upstream-$suffix"
 scratch="$(mktemp -d)"
 cleanup() {
-  docker rm -f "$web" "$php" >/dev/null 2>&1 || true
+  docker rm -f "$web" "$php" "$upstream" >/dev/null 2>&1 || true
   docker network rm "$network" >/dev/null 2>&1 || true
   docker volume rm "$volume" >/dev/null 2>&1 || true
   rm -rf "$scratch"
@@ -32,16 +33,31 @@ if (($_GET['mode'] ?? '') === 'large') {
 if (($_GET['mode'] ?? '') === 'drip') {
     header('Content-Type: text/plain');
     header('X-Accel-Buffering: no');
-    for ($i = 0; $i < 40; $i++) {
-        echo "tick\n";
-        flush();
-        sleep(1);
+    $stream = fopen('http://upstream-php:8000/upstream.php', 'r');
+    if ($stream === false) {
+        http_response_code(502);
+        return;
     }
+    stream_set_timeout($stream, 5);
+    while (($line = fgets($stream)) !== false) {
+        echo "upstream:$line";
+        flush();
+    }
+    fclose($stream);
     echo "finished\n";
     return;
 }
 header('Content-Type: text/plain');
 echo "ready\n";
+PHP
+cat >"$scratch/upstream.php" <<'PHP'
+<?php
+header('Content-Type: text/plain');
+for ($i = 0; $i < 40; $i++) {
+    echo "tick\n";
+    flush();
+    sleep(1);
+}
 PHP
 
 docker network create "$network" >/dev/null
@@ -50,6 +66,10 @@ common_env='base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='
 docker run --rm --platform linux/amd64 -v "$volume:/app/storage" \
   -e APP_ENV=local -e WAASEYAA_APP_SECRET="$common_env" \
   "$php_image" php vendor/bin/waaseyaa install:init >/dev/null
+docker run -d --name "$upstream" --network "$network" --network-alias upstream-php \
+  --platform linux/amd64 -v "$scratch/upstream.php:/tmp/upstream.php:ro" \
+  "$php_image" php -d output_buffering=Off -d zlib.output_compression=Off \
+  -S 0.0.0.0:8000 -t /tmp >/dev/null
 docker run -d --name "$php" --network "$network" --network-alias control-plane-php \
   --platform linux/amd64 -v "$volume:/app/storage" \
   -v "$scratch/index.php:/app/public/index.php:ro" \
@@ -79,7 +99,7 @@ grep -q 'request_terminate_timeout_track_finished = yes' "$scratch/fpm-config"
 
 # Every drip arrives well inside Nginx's 30-second read-idle limit.
 start="$(date +%s)"
-curl -sS --max-time 38 -o "$scratch/drip" "$url?mode=drip" \
+curl -sS --max-time 45 -o "$scratch/drip" "$url?mode=drip" \
   >"$scratch/drip-stdout" 2>"$scratch/drip-stderr" &
 drip_pid=$!
 sleep 2
@@ -90,7 +110,7 @@ test "$(wc -c <"$scratch/large" | tr -d ' ')" -eq 8388608 || {
 }
 wait "$drip_pid" || true
 elapsed="$(($(date +%s) - start))"
-if [ "$elapsed" -lt 22 ] || [ "$elapsed" -gt 34 ]; then
+if [ "$elapsed" -lt 22 ] || [ "$elapsed" -gt 37 ]; then
   echo "Drip ended after ${elapsed}s; expected FPM's 25-second backstop" >&2
   exit 1
 fi
@@ -98,14 +118,21 @@ if grep -q '^finished$' "$scratch/drip"; then
   echo 'Drip finished instead of being terminated' >&2
   exit 1
 fi
-docker logs "$php" 2>&1 | grep -q 'execution timed out' || {
+ticks="$(grep -c '^upstream:tick$' "$scratch/drip" || true)"
+if [ "$ticks" -lt 10 ]; then
+  echo "FPM received only $ticks upstream ticks before ending" >&2
+  exit 1
+fi
+timeout_log="$(docker logs "$php" 2>&1 | grep 'execution timed out' || true)"
+if [ -z "$timeout_log" ]; then
   echo 'FPM did not log worker termination' >&2
   docker logs --tail 20 "$php" >&2 || true
   exit 1
-}
+fi
 curl -fsS --max-time 10 "$url" -o "$scratch/recovered"
 grep -qx ready "$scratch/recovered" || {
   echo 'PHP pool did not recover after worker termination' >&2
   exit 1
 }
-echo 'Routed worker bound, concurrent 8 MiB response, and pool recovery: ok'
+echo "Routed upstream drip ($ticks ticks), worker bound (${elapsed}s), concurrent 8 MiB response, and pool recovery: ok"
+printf '%s\n' "$timeout_log"
