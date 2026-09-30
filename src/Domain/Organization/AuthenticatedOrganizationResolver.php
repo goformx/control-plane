@@ -19,6 +19,7 @@ final readonly class AuthenticatedOrganizationResolver implements OrganizationRe
         private OrganizationMembershipService $memberships,
         private EntityTypeManagerInterface $entityTypeManager,
         private UserInternalFieldReaderInterface $internalFields,
+        private bool $requireVerifiedEmail = true,
     ) {}
 
     public function account(Request $request): AuthenticatedAccount
@@ -32,7 +33,7 @@ final readonly class AuthenticatedOrganizationResolver implements OrganizationRe
         if (!$user instanceof EntityInterface) {
             throw new OrganizationAccessDenied('The authenticated account is unavailable.');
         }
-        if (!$this->internalFields->verification($user)->emailVerified) {
+        if ($this->requireVerifiedEmail && !$this->internalFields->verification($user)->emailVerified) {
             throw new OrganizationAccessDenied('Verify your email address before accessing an organization.');
         }
         $subjectId = $user->uuid();

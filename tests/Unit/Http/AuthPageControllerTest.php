@@ -23,4 +23,17 @@ final class AuthPageControllerTest extends TestCase
         $this->expectException(\InvalidArgumentException::class);
         new AuthPageController('https://private:secret@example.test');
     }
+
+    public function testRegistrationPageRedirectMatchesEmailVerificationPolicy(): void
+    {
+        $unverified = (new AuthPageController('https://public.example.test', false))->register()->getContent();
+        self::assertStringContainsString('location.href=\'/app\'', $unverified);
+        self::assertStringContainsString('Your dashboard is ready after you create your account.', $unverified);
+        self::assertStringNotContainsString('{{ REGISTRATION_', $unverified);
+
+        $verified = (new AuthPageController('https://public.example.test', true))->register()->getContent();
+        self::assertStringContainsString('location.href=\'/verify-email\'', $verified);
+        self::assertStringContainsString('Verify your email before opening the dashboard.', $verified);
+        self::assertStringNotContainsString('{{ REGISTRATION_', $verified);
+    }
 }

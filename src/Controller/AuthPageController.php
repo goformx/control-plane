@@ -8,7 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class AuthPageController
 {
-    public function __construct(private readonly string $publicApiOrigin)
+    public function __construct(private readonly string $publicApiOrigin, private readonly bool $requireVerifiedEmail = true)
     {
         $url = parse_url($publicApiOrigin);
         if (!is_array($url) || !isset($url['scheme'], $url['host']) ||
@@ -21,7 +21,15 @@ final class AuthPageController
 
     public function register(): Response
     {
-        return $this->page('register');
+        $html = $this->page('register')->getContent();
+        $redirect = $this->requireVerifiedEmail ? '/verify-email' : '/app';
+        $message = $this->requireVerifiedEmail
+            ? 'Start with a personal workspace. Verify your email before opening the dashboard.'
+            : 'Start with a personal workspace. Your dashboard is ready after you create your account.';
+        $html = str_replace('{{ REGISTRATION_REDIRECT }}', $redirect, $html);
+        $html = str_replace('{{ REGISTRATION_MESSAGE }}', $message, $html);
+
+        return new Response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Cache-Control' => 'no-store']);
     }
 
     public function login(): Response

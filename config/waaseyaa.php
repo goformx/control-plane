@@ -122,12 +122,16 @@ return [
     'auth' => [
         // Self-service accounts remain application-local at launch. OIDC is a
         // future migration seam, not a dependency of the first release.
-        'registration' => getenv('GOFORMX_REGISTRATION_MODE') ?: (
-            in_array(getenv('APP_ENV') ?: 'production', ['local', 'dev', 'development'], true)
-                ? 'open'
-                : 'admin'
+        // Public registration remains explicit deployment policy. This
+        // candidate defaults to open signup; set GOFORMX_REGISTRATION_MODE=admin
+        // to close it without changing account authentication behavior.
+        'registration' => getenv('GOFORMX_REGISTRATION_MODE') ?: 'open',
+        // Alpha.302 exposes this policy in AuthConfig but the application must
+        // enforce it at its own organization boundary as well.
+        'require_verified_email' => filter_var(
+            getenv('GOFORMX_REQUIRE_VERIFIED_EMAIL') ?: 'false',
+            FILTER_VALIDATE_BOOLEAN,
         ),
-        'require_verified_email' => true,
         // Keep auth-token HMAC custody separate from JWT machine credentials.
         // When omitted, Waaseyaa derives it from WAASEYAA_APP_SECRET.
         'token_secret' => getenv('WAASEYAA_AUTH_TOKEN_SECRET') ?: '',

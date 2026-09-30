@@ -4,7 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { chromium } from 'playwright';
 
-test('released account flow registers, verifies, rotates sessions and resets password', { timeout: 120000 }, async () => {
+test('released account flow follows verification policy and exercises normal login', { timeout: 120000 }, async () => {
   assert.equal(process.env.GOFORMX_ACCOUNT_REHEARSAL, '1');
   assert.equal(process.env.APP_ENV, 'local');
   const origin = process.env.GOFORMX_ACCOUNT_UI_URL;
@@ -30,6 +30,10 @@ test('released account flow registers, verifies, rotates sessions and resets pas
     const session = async () => (await context.cookies(origin)).find(cookie => /session|sessid/i.test(cookie.name));
 
     assert.equal((await page.goto(origin + '/register')).status(), 200);
+    const requireVerification = process.env.GOFORMX_REQUIRE_VERIFIED_EMAIL === 'true';
+    assert.match(await page.locator('main').innerText(), requireVerification
+      ? /Verify your email before opening the dashboard\./
+      : /Your dashboard is ready after you create your account\./);
     const anonymous = await session();
     await page.getByLabel('Name').fill('Account gate');
     await page.getByLabel('Email').fill(email);
@@ -38,6 +42,25 @@ test('released account flow registers, verifies, rotates sessions and resets pas
     await page.getByRole('button', { name: 'Create account' }).click();
     const registered = await registration;
     assert.equal(registered.status(), 201);
+    if (!requireVerification) {
+      await page.waitForURL(origin + '/app');
+      assert.ok(await session(), 'successful signup creates an authenticated session');
+      assert.equal(await status('/api/control-plane/context'), 200);
+      const logoutStatus = await page.evaluate(async () => {
+        const csrf = decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKEN=([^;]*)/)?.[1] ?? '');
+        return (await fetch('/api/auth/logout', { method: 'POST', headers: { 'X-XSRF-TOKEN': csrf } })).status;
+      });
+      assert.equal(logoutStatus, 200);
+      await page.goto(origin + '/login');
+      await page.getByLabel('Email').fill(email);
+      await page.getByLabel('Password').fill(password);
+      const loginResponse = page.waitForResponse(response => response.url().endsWith('/api/auth/login'));
+      await page.getByRole('button', { name: 'Sign in' }).click();
+      assert.equal((await loginResponse).status(), 200);
+      await page.waitForURL(origin + '/app');
+      assert.equal(await status('/api/control-plane/context'), 200);
+      return;
+    }
     await page.waitForURL(origin + '/verify-email');
     assert.notEqual(await status('/api/control-plane/context'), 200, 'unverified account cannot enter a workspace');
 

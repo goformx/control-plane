@@ -19,7 +19,9 @@ Runtime configuration is supplied through environment variables. `APP_URL` is th
 
 `WAASEYAA_AUTH_TOKEN_SECRET` optionally gives verification, reset, and invite tokens an independent HMAC key. When absent, Waaseyaa derives a purpose-scoped key from `WAASEYAA_APP_SECRET`; the application does not reuse `WAASEYAA_JWT_SECRET`.
 
-Production registration defaults to `admin` (closed). For a new private account, an operator can run Waaseyaa's supported `user:provision-registered` command with the registered role and password supplied through bounded stdin JSON, then request the normal `POST /api/auth/resend-verification` flow for that email while registration remains closed. The account cannot log in until the recipient follows the emailed verification link. This requires qualified real outbound mail; never mark the database row verified directly or use a disposable token-capture fixture for production setup. Configure `SENDGRID_API_KEY`, `GOFORMX_MAIL_FROM_ADDRESS`, and an optional `GOFORMX_MAIL_FROM_NAME`, verify delivery, and only then provision the private account or set `GOFORMX_REGISTRATION_MODE=open`. Local development defaults to open registration and logs verification/reset URLs when mail is absent.
+The private-use candidate defaults to `GOFORMX_REGISTRATION_MODE=open` and `GOFORMX_REQUIRE_VERIFIED_EMAIL=false`. Registration uses Waaseyaa's normal public signup route, and an unverified account may sign in and use its personal organization. Set registration mode to `admin` to close signup, or set `GOFORMX_REQUIRE_VERIFIED_EMAIL=true` to require verification before organization access. Waaseyaa alpha.302's `user:create` is an operator CLI command that creates a user with a hashed password and chosen role; it leaves email verification unset. The earlier `user:provision-registered` command is not present in locked alpha.302. Do not edit database fields or manufacture verification tokens.
+
+Mail is optional for registration and login under the candidate policy. The normal forgot-password/reset flow still uses email, so it is the recovery path if an account password is lost. Alpha.302 has no local CLI password-reset command. Keep a newly assigned password in the user's authorized password manager during private-use setup. Configure `SENDGRID_API_KEY`, `GOFORMX_MAIL_FROM_ADDRESS`, and optional `GOFORMX_MAIL_FROM_NAME` only when email delivery is part of the chosen deployment. Do not log or capture live reset or verification tokens.
 
 ## Production image boot
 
@@ -39,8 +41,8 @@ The FPM supervisor owns the preflight write and request workers run as
 readiness must route `/login` through Nginx and FPM and require HTTP 200, then
 check application and database operations before sending public traffic.
 The disposable smoke is `sh scripts/verify-proxy-cookie.sh` after both images
-are built. A successful image smoke does not replace capacity, mail, restore,
-migration, or rollback acceptance.
+are built. A successful image smoke does not replace capacity, restore, or
+rollback acceptance.
 
 The `www` FPM pool has a 25-second request-termination setting, including
 work after `fastcgi_finish_request()` and shutdown functions. This is a hard
@@ -56,4 +58,4 @@ test endpoint is included in the production image.
 
 ## Production topology
 
-Cloudflare remains authoritative for public DNS. The proposed private-release target is `fetder-droplet`, subject to capacity and operational acceptance. `www.goformx.com` is the canonical Waaseyaa UI and `api.goformx.com` is the Go service; apex behavior requires a reviewed compatibility decision before DNS changes. The Raspberry Pi remains a recovery dependency until an in-place droplet rollback is proven. Application storage is a local SQLite volume included in the encrypted/offsite backup procedure. Deployments run migrations before traffic and retain the previous application artifact for rollback.
+Cloudflare remains authoritative for public DNS. The proposed greenfield target is `fetder-droplet`. `www.goformx.com` is the canonical Waaseyaa UI and `api.goformx.com` is the Go service; the initial DNS change leaves apex unchanged. Russell confirmed there are no existing users or data to migrate, so this install uses fresh PostgreSQL and a persistent SQLite volume, with no Pi recovery dependency. Take consistent backups after initial writes, apply migrations before traffic and retain the previous working images. Host and DNS changes require deployment approval.

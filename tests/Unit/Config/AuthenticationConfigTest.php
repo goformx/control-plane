@@ -13,7 +13,7 @@ final class AuthenticationConfigTest extends TestCase
 
     protected function setUp(): void
     {
-        foreach (['APP_ENV', 'GOFORMX_REGISTRATION_MODE', 'SENDGRID_API_KEY', 'GOFORMX_MAIL_FROM_ADDRESS'] as $name) {
+        foreach (['APP_ENV', 'GOFORMX_REGISTRATION_MODE', 'GOFORMX_REQUIRE_VERIFIED_EMAIL', 'SENDGRID_API_KEY', 'GOFORMX_MAIL_FROM_ADDRESS'] as $name) {
             $this->original[$name] = getenv($name);
             putenv($name);
         }
@@ -26,11 +26,11 @@ final class AuthenticationConfigTest extends TestCase
         }
     }
 
-    public function testProductionRegistrationFailsClosedWithoutAnExplicitMode(): void
+    public function testProductionRegistrationDefaultsOpenForThePrivateUseCandidate(): void
     {
         putenv('APP_ENV=production');
 
-        self::assertSame('admin', $this->config()['auth']['registration']);
+        self::assertSame('open', $this->config()['auth']['registration']);
     }
 
     public function testLocalRegistrationDefaultsOpen(): void
@@ -51,6 +51,23 @@ final class AuthenticationConfigTest extends TestCase
         self::assertSame('open', $config['auth']['registration']);
         self::assertSame('not-a-real-secret', $config['mail']['sendgrid_api_key']);
         self::assertSame('forms@example.test', $config['mail']['from_address']);
+    }
+
+    public function testEmailVerificationIsOptionalByDefaultAndCanBeRequired(): void
+    {
+        putenv('APP_ENV=production');
+        self::assertFalse($this->config()['auth']['require_verified_email']);
+
+        putenv('GOFORMX_REQUIRE_VERIFIED_EMAIL=true');
+        self::assertTrue($this->config()['auth']['require_verified_email']);
+    }
+
+    public function testRegistrationCanBeClosedWithoutRequiringVerifiedEmail(): void
+    {
+        putenv('APP_ENV=production');
+        putenv('GOFORMX_REGISTRATION_MODE=admin');
+        self::assertSame('admin', $this->config()['auth']['registration']);
+        self::assertFalse($this->config()['auth']['require_verified_email']);
     }
 
     /** @return array<string, mixed> */

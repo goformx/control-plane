@@ -51,6 +51,7 @@ final class AppServiceProvider extends ServiceProvider
     {
         $this->singleton(AuthPageController::class, fn() => new AuthPageController(
             (string) $this->config['goformx']['public_api_url'],
+            (bool) ($this->config['auth']['require_verified_email'] ?? true),
         ));
         $this->entityType(EntityType::fromClass(Organization::class, discoverable: false));
         $this->entityType(EntityType::fromClass(OrganizationMembership::class, discoverable: false));
@@ -69,6 +70,7 @@ final class AppServiceProvider extends ServiceProvider
             $this->resolve(OrganizationMembershipService::class),
             $this->resolve(EntityTypeManager::class),
             $this->resolve(UserInternalFieldReaderInterface::class),
+            (bool) ($this->config['auth']['require_verified_email'] ?? true),
         ));
         $this->singleton(OrganizationRequestContextResolverInterface::class, fn() => $this->resolve(
             AuthenticatedOrganizationResolver::class,
