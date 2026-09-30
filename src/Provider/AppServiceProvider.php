@@ -9,11 +9,13 @@ use App\Controller\FirstPartyJwksController;
 use App\Controller\HomeController;
 use App\Controller\ManagementFormsController;
 use App\Controller\ManagementSubmissionsController;
+use App\Controller\ManagementSitesController;
 use App\Controller\ManagementIntegrationsController;
 use App\Domain\GoFormX\IntegrationOperation;
 use App\Controller\OrganizationContextController;
 use App\Domain\GoFormX\FormOperation;
 use App\Domain\GoFormX\SubmissionOperation;
+use App\Domain\GoFormX\SiteOperation;
 use App\Domain\Organization\AuthenticatedOrganizationResolver;
 use App\Domain\Organization\OrganizationMembershipService;
 use App\Domain\Organization\OrganizationRequestContextResolverInterface;
@@ -107,6 +109,10 @@ final class AppServiceProvider extends ServiceProvider
             $this->resolve(OrganizationRequestContextResolverInterface::class),
             $this->resolve(ManagementApiClientInterface::class),
         ));
+        $this->singleton(ManagementSitesController::class, fn() => new ManagementSitesController(
+            $this->resolve(OrganizationRequestContextResolverInterface::class),
+            $this->resolve(ManagementApiClientInterface::class),
+        ));
         $this->singleton(FirstPartyJwksController::class, fn() => new FirstPartyJwksController(
             fn(): JwksDocument => $this->resolve(JwksDocument::class),
         ));
@@ -179,6 +185,16 @@ final class AppServiceProvider extends ServiceProvider
                 $builder->requireCsrf();
             }
             $router->addRoute('goformx.management.forms.' . $operation->value, $builder->build());
+        }
+        foreach (SiteOperation::cases() as $operation) {
+            $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))
+                ->controller(fn(Request $request, string ...$routeParameters) => $this->resolve(ManagementSitesController::class)->handle($request, $operation))
+                ->requireAuthentication()
+                ->methods($operation->method());
+            if ($operation === SiteOperation::Create) {
+                $builder->requireCsrf();
+            }
+            $router->addRoute('goformx.management.sites.' . $operation->value, $builder->build());
         }
         foreach (SubmissionOperation::cases() as $operation) {
             $builder = RouteBuilder::create('/api/control-plane' . substr($operation->template(), strlen('/v1')))

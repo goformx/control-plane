@@ -8,6 +8,7 @@ use App\Domain\GoFormX\ManagementScope;
 use App\Domain\GoFormX\FormOperation;
 use App\Domain\GoFormX\IntegrationOperation;
 use App\Domain\GoFormX\SubmissionOperation;
+use App\Domain\GoFormX\SiteOperation;
 use App\Infrastructure\GoFormX\ManagementApiClientInterface;
 use PHPUnit\Framework\TestCase;
 use Waaseyaa\Entity\EntityInterface;
@@ -175,12 +176,15 @@ final class AuthenticatedManagementBoundaryTest extends TestCase
         foreach (SubmissionOperation::cases() as $operation) {
             $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [ManagementScope::SubmissionsRead->value]];
         }
+        foreach (SiteOperation::cases() as $operation) {
+            $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [$operation->scope()->value]];
+        }
         foreach (IntegrationOperation::cases() as $operation) {
             $actual[$operation->method() . ' ' . $operation->template()] = [$operation->operationId(), [$operation->scope()->value]];
         }
         ksort($expected);
         ksort($actual);
-        self::assertCount(20, $expected);
+        self::assertCount(24, $expected);
         self::assertSame($expected, $actual);
     }
 

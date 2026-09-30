@@ -4,6 +4,8 @@ The human-facing account and management application for [GoFormX](https://goform
 
 This repository owns browser sessions, accounts, organization membership, navigation, and human workflows. The Go service at `api.goformx.com` remains the source of truth for forms, schemas, publication, submissions, service tokens, and webhooks. This application never connects to the GoFormX data-plane database and never sends a privileged service credential to a browser.
 
+The current [product direction](https://github.com/goformx/goformx/issues/84) is to let developers create and connect forms from their existing AI tools, then review authorized submissions from multiple sites in one human inbox. The personal-site contact flow remains a regression gate; it is not the full product or release milestone. Publication stays explicit, and a default assistant connection does not receive submission-read permission.
+
 ## Issue tracking
 
 Product work for this repository is tracked centrally with the data plane so
@@ -54,6 +56,14 @@ filters across at most 1,000 rows/8 MiB, not only the current page. JSON is the
 machine round-trip format; CSV uses text-prefixed cells and is not guaranteed safe
 after arbitrary spreadsheet edits or re-saves. Missing recent delivery entries
 do not establish that a submission was never delivered.
+
+The workspace-level **All submissions** inbox reads the same Go records across
+forms and sites. Owners and admins can filter by site, form ID, accepted version,
+status and received time, then open the exact accepted schema snapshot. Members
+cannot load the inbox. The PHP application proxies authorized requests without
+storing a second submission copy, and the browser clears received content on
+tab hide or workspace access changes. The assistant connection does not need
+or receive submission-read scope for form creation.
 
 The editor requires a current browser supporting native JSON source access and
 `JSON.rawJSON`; startup checks this before loading the workspace. Numeric

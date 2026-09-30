@@ -159,6 +159,44 @@ final class SubmissionWorkflowTest extends TestCase
         self::assertSame(400, $controller->handle($this->request(SubmissionOperation::Export, $body), SubmissionOperation::Export)->getStatusCode());
     }
 
+    public function testWorkspaceInboxUsesSignedOperationAndPreservesCanonicalFilters(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Admin));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $query = 'limit=25&siteId=' . self::FORM . '&formId=' . self::SUBMISSION . '&status=accepted';
+        $client->expects(self::once())->method('request')->willReturnCallback(
+            static function (string $method, string $path, string $subject, string $organization,
+                array $scopes, mixed $body, mixed $requestId, mixed $ifMatch,
+                mixed $mediaType, ?string $operationId) use ($query): HttpResponse {
+                self::assertSame('GET', $method);
+                self::assertSame('/v1/submissions?' . $query, $path);
+                self::assertSame(self::SUBJECT, $subject);
+                self::assertSame(self::ORGANIZATION, $organization);
+                self::assertSame([ManagementScope::SubmissionsRead], $scopes);
+                self::assertNull($body);
+                self::assertSame('listWorkspaceSubmissions', $operationId);
+                return new HttpResponse(200, '{"data":[],"meta":{"nextCursor":null}}');
+            });
+        $request = $this->request(SubmissionOperation::WorkspaceList);
+        $request->server->set('QUERY_STRING', $query);
+        $response = (new ManagementSubmissionsController($resolver, $client))->handle($request, SubmissionOperation::WorkspaceList);
+        self::assertSame(200, $response->getStatusCode());
+        self::assertStringContainsString('no-store', $response->headers->get('Cache-Control'));
+    }
+
+    public function testWorkspaceInboxRejectsOversizedQueryBeforeAssertion(): void
+    {
+        $resolver = $this->createStub(OrganizationRequestContextResolverInterface::class);
+        $resolver->method('resolve')->willReturn($this->context(OrganizationRole::Owner));
+        $client = $this->createMock(ManagementApiClientInterface::class);
+        $client->expects(self::never())->method('request');
+        $request = $this->request(SubmissionOperation::WorkspaceList);
+        $request->server->set('QUERY_STRING', 'cursor=' . str_repeat('a', 4090));
+        self::assertSame(400, (new ManagementSubmissionsController($resolver, $client))
+            ->handle($request, SubmissionOperation::WorkspaceList)->getStatusCode());
+    }
+
     #[DataProvider('invalidRequests')]
     public function testInvalidRequestCannotIssueAnAssertion(string $scenario, int $status): void
     {

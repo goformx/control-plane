@@ -3,6 +3,7 @@ import { Compartment, EditorState } from '@codemirror/state';
 import { json } from '@codemirror/lang-json';
 import { requireJsonSupport } from './schema-json.js';
 import { initSubmissions } from './submissions-app.js';
+import { initWorkspaceInbox } from './inbox-app.js';
 import { initIntegrations } from './integrations-app.js';
 import { readBoundedResponse } from './bounded-response.js';
 import { addField, errorMessage, integrationExample, PAGE_SIZE, parseOrigins, parseSchema, parseJSON, stringify, publicEndpoints, starterSchema } from './forms-model.js';
@@ -33,6 +34,7 @@ const csrf = () => decodeURIComponent(document.cookie.match(/(?:^|;\s*)XSRF-TOKE
 const publicOrigin = document.querySelector('meta[name="goformx-api-origin"]').content;
 const formPath = () => `/api/control-plane/forms/${encodeURIComponent(state.form.id)}`;
 const submissions = initSubmissions({ context: () => state, verifyWorkspace });
+const inbox = initWorkspaceInbox({ context: () => state, verifyWorkspace, openForm: id => act(() => openForm(id)) });
 const integrations = initIntegrations({ context: () => state, verifyWorkspace });
 
 function clearError() { $('error').hidden = true; text('error-message', ''); $('error-fields').replaceChildren(); $('sign-in').hidden = true; $('verify-email').hidden = true; }
@@ -75,9 +77,11 @@ async function act(work) {
 }
 function controls() {
   submissions.controls();
+  inbox.controls();
   integrations.controls();
   const canWrite = writable() && !state.busy && !state.uncertain;
   $('new-form').disabled = !canWrite;
+  $('open-inbox').disabled = state.busy;
   $('metadata-fields').disabled = !canWrite;
   $('form-name').readOnly = !!state.form;
   $('save-schema').disabled = !canWrite || (!!state.form && !schemaDirty());
@@ -116,7 +120,7 @@ function fillMetadata(form) {
 function metadata() {
   return { title: $('form-title').value, description: $('form-description').value, allowedOrigins: parseOrigins($('form-origins').value) };
 }
-function reveal() { $('welcome').hidden = true; $('editor-panel').hidden = false; $('editor-heading').focus(); }
+function reveal() { inbox.reset(); $('workspace-inbox').hidden = true; $('open-inbox').setAttribute('aria-current', 'false'); $('welcome').hidden = true; $('editor-panel').hidden = false; $('editor-heading').focus(); }
 function renderTasks() {
   if (!state.form && state.activeTask !== 'build') state.activeTask = 'build';
   for (const task of formTasks) {
@@ -230,8 +234,9 @@ function newForm() {
 }
 async function verifyWorkspace() {
   const context = await api('/api/control-plane/context');
-  if (state.organization && state.organization !== context.data.id) throw new Error('The active workspace changed in another tab. Download your edits, then reload this page before continuing.');
+  if (state.organization && state.organization !== context.data.id) { inbox.reset(); throw new Error('The active workspace changed in another tab. Download your edits, then reload this page before continuing.'); }
   state.organization = context.data.id; state.role = context.data.attributes.role;
+  inbox.controls();
   text('organization', context.data.attributes.name); text('role', `${state.role} · Server-authorized workspace`);
 }
 async function saveSchema() {
@@ -258,6 +263,12 @@ async function saveMetadata() {
 }
 
 $('new-form').onclick = () => { if (confirmDiscard()) { clearError(); newForm(); } };
+$('open-inbox').onclick = () => {
+  if (!confirmDiscard()) return;
+  clearError(); inbox.reset(); $('welcome').hidden = true; $('editor-panel').hidden = true;
+  $('workspace-inbox').hidden = false; $('open-inbox').setAttribute('aria-current', 'true');
+  $('inbox-heading').focus(); inbox.open();
+};
 for (const button of document.querySelectorAll('[data-form-task]')) button.onclick = () => selectTask(button.dataset.formTask);
 $('refresh').onclick = () => act(async () => { await verifyWorkspace(); await listForms(); });
 $('previous').onclick = () => act(async () => { state.offset -= PAGE_SIZE; await listForms(); });

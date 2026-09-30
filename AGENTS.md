@@ -15,6 +15,7 @@ Generated files are owned by `.waaseyaa/generated.json`. Regeneration refuses ed
 <!-- waaseyaa:extension:start local-guidance -->
 ## GoFormX authority boundaries
 
+- Follow the 2026-09-29 product direction in the central [roadmap](https://github.com/goformx/goformx/issues/84). In Russell's local workspace, also read `C:/projects/GoFormX/product/PRODUCT-VISION.md` and `ROADMAP.md` before product changes. The milestone is an assistant-created form and a human inbox spanning authorized sites; the personal-site contact flow is a retained regression gate, not the whole release definition.
 - This repository owns browser sessions, human accounts, application-owned organizations and memberships, navigation, and human workflows.
 - `goformx/goformx` owns forms, Draft 2020-12 schemas, immutable schema versions, publication, submissions, service tokens, webhooks, and the canonical OpenAPI document at `goforms/contracts/openapi.v1.yaml`.
 - Never connect PHP to the GoFormX PostgreSQL database or persist copies of forms and submissions as another source of truth.
@@ -22,6 +23,7 @@ Generated files are owned by `.waaseyaa/generated.json`. Regeneration refuses ed
 - First-party Waaseyaa assertions and external `gfst_` service tokens are separate credential classes defined by goformx/goformx#126. Neither may be exposed in browser-delivered code or logs.
   The #123 provisioning exception may reveal a newly issued external token once to its authorized owner/admin in a no-store response. It must never expose the credential used by the control plane, recover stored tokens, persist the reveal, or send it to telemetry. See ADR 0002.
 - The Waaseyaa UI, third-party agents, and custom dashboards use the same documented business contract. Do not create an agent superuser or a second MCP-only business API.
+- The control plane renders the human inbox through Go's authorized API. Do not copy submission records into SQLite or treat an organization ID as a site ID.
 
 ## Agent roles
 

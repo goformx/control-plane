@@ -9,7 +9,7 @@ export const FORM_ID = '11111111-1111-4111-8111-111111111111';
 export const ORG_ID = '22222222-2222-4222-8222-222222222222';
 export async function startServer({ populated = false, role = 'owner', port = 0 } = {}) {
   const data = { role, requests: [], failure: null, delayList: 0, etag: '"revision-1"', revision: 1, forms: populated ? [{ id: FORM_ID, organizationId: ORG_ID, name: 'contact', title: 'Contact us', description: '', publicKey: 'gfpk_example', allowedOrigins: ['https://example.test'], status: 'draft', currentVersion: 1 }] : [], versions: [{ formId: FORM_ID, version: 1, state: 'draft', schema: starterSchema() }] };
-  data.submissions = []; data.deliveries = []; data.delaySubmissions = 0;
+  data.submissions = []; data.workspaceSubmissions = []; data.sites = []; data.deliveries = []; data.delaySubmissions = 0;
   data.compressSubmissions = false; data.exportDecodedLengthOverride = null;
   const server = createServer(async (request, response) => {
     const url = new URL(request.url, 'http://localhost');
@@ -39,6 +39,25 @@ export async function startServer({ populated = false, role = 'owner', port = 0 
     if (url.pathname === '/api/control-plane/context') { send(200, { data: { id: ORG_ID, attributes: { name: 'Test workspace', role: data.role } } }); return; }
     if (url.pathname === '/api/auth/logout') { send(200, { data: {} }); return; }
     if (request.method !== 'GET' && request.headers['x-xsrf-token'] !== 'test-csrf') { send(403, { errors: [{ detail: 'CSRF required' }] }); return; }
+    if (url.pathname === '/api/control-plane/sites' && request.method === 'GET') {
+      if (data.role === 'member') { send(403, { error: { code: 'denied' } }); return; }
+      const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 25);
+      send(200, { data: data.sites.slice(offset, offset + limit), meta: { limit, offset, total: data.sites.length, organizationId: ORG_ID } }); return;
+    }
+    if (url.pathname === '/api/control-plane/submissions' && request.method === 'GET') {
+      if (data.role === 'member') { send(403, { error: { code: 'denied' } }); return; }
+      const filters = Object.fromEntries(url.searchParams);
+      const rows = data.workspaceSubmissions.filter(row => (!filters.siteId || row.siteId === filters.siteId)
+        && (!filters.formId || row.formId === filters.formId) && (!filters.schemaVersion || row.schemaVersion === Number(filters.schemaVersion)));
+      const offset = Number(filters.cursor ?? 0), limit = Number(filters.limit ?? 25);
+      send(200, { data: rows.slice(offset, offset + limit), meta: { limit, nextCursor: rows.length > offset + limit ? String(offset + limit) : null } }); return;
+    }
+    const workspaceDetail = url.pathname.match(/^\/api\/control-plane\/forms\/([0-9a-f-]+)\/submissions\/([0-9a-f-]+)$/);
+    if (workspaceDetail && workspaceDetail[1] !== FORM_ID) {
+      if (data.role === 'member') { send(403, { error: { code: 'denied' } }); return; }
+      const row = data.submissions.find(row => row.formId === workspaceDetail[1] && row.id === workspaceDetail[2]);
+      if (row) send(200, { data: row }); else send(404, { error: { code: 'not_found' } }); return;
+    }
     if (url.pathname === '/api/control-plane/forms' && request.method === 'GET') {
       if (data.delayList) await new Promise(resolve => setTimeout(resolve, data.delayList));
       const offset = Number(url.searchParams.get('offset') ?? 0), limit = Number(url.searchParams.get('limit') ?? 25);
