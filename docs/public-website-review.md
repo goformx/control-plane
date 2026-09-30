@@ -32,4 +32,10 @@ The public controller takes its canonical origin from configured `APP_URL` throu
 
 The September 29 two-site local Codex rehearsal and September 30 live personal-site collection are separate evidence. Hosted client setup remains manual and is not qualified as a complete one-click published-client journey. Email notification delivery, a second assistant harness and broader production acceptance remain open. The getting-started commands are sourced from the versioned experimental client contract, with placeholder identities and explicit publication approval.
 
-Operator contact, retention information and public policies need owner review before broader promotion. Illustrations are labeled synthetic and contain no real submissions or credentials. This change does not close product acceptance gates or authorize release-stack reconciliation, merges or deployment.
+Operator identity is now confirmed as Russell Jones, jonesrussell42@gmail.com. The public-policy drafts in `docs/public-policies/` describe inspected retention, deletion and backup limits, with a separate evidence/decision plan. Proposed retention periods are not adopted or implemented. Illustrations are labeled synthetic and contain no real submissions or credentials. This change does not close product acceptance gates or authorize merges or deployment.
+
+## Readiness follow-up
+
+The release fixture repair at `10533fdf9fe2d840a6e78e1b56e8c4f47eac8175` pins custody discovery to the local test fixture. The complete hosted CI for #35 and refreshed website head `169cd5dc8b83f57123aaee1cdcacdbf7c86caf42` passed. Immutable deployed source remains bb384f90; these branch changes are not deployed.
+
+Candidate client #206 at `b3b2d3347a7929efae61d349649867abcb9acdc1` passed hosted discovery, credential-free module generation, public schema read and allowed-origin preflight without a wrapper. Its short-lived forms:read grant was revoked (204), and the next call was denied (401). No enquiry or publication occurred. This qualifies the hosted read path, not the complete creation/publication/receipt journey. The compatibility page reflects that distinction. The client code is unchanged by its later documentation/CI update.
