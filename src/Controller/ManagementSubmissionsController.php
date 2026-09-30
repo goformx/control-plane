@@ -41,7 +41,8 @@ final readonly class ManagementSubmissionsController
             // Preserve duplicates and exact filter bytes for Go's canonical strict
             // parser. PHP's parsed query bag would silently collapse repeated keys.
             $query = (string) $request->server->get('QUERY_STRING', '');
-            if (strlen($query) > 2048 || ($operation !== SubmissionOperation::List && $query !== '')) {
+            $maxQueryBytes = $operation === SubmissionOperation::WorkspaceList ? 4096 : 2048;
+            if (strlen($query) > $maxQueryBytes || (!in_array($operation, [SubmissionOperation::List, SubmissionOperation::WorkspaceList], true) && $query !== '')) {
                 throw new InvalidSubmissionRequest(400, 'Unsupported submission query.');
             }
             if ($query !== '') {

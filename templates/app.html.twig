@@ -41,10 +41,28 @@
   </section>
   <div class="layout">
     <aside aria-labelledby="forms-heading"><div class="section-heading"><div><p class="eyebrow">CONTENT</p><h2 id="forms-heading">Your forms</h2></div><button id="refresh" class="quiet" type="button">Refresh</button></div>
+      <button id="open-inbox" type="button" aria-controls="workspace-inbox">All submissions</button>
       <p id="list-state" role="status">Loading forms…</p><nav id="forms-list" aria-label="Workspace forms"></nav>
       <div class="pagination"><button id="previous" type="button" disabled>Previous</button><span id="page-number"></span><button id="next" type="button" disabled>Next</button></div>
     </aside>
     <section id="welcome" class="panel welcome"><p class="eyebrow">START HERE</p><h2>Choose a form to continue</h2><p>Select a form from <strong>Your forms</strong> to edit its schema, publish a version, inspect submissions, or configure delivery.</p><ol class="workflow"><li><strong>Define</strong><span>Describe fields with portable JSON Schema.</span></li><li><strong>Publish</strong><span>Choose exactly which saved version accepts submissions.</span></li><li><strong>Connect</strong><span>Add your website and monitor delivery.</span></li></ol><p class="muted">Creating something new? Use <strong>+ New form</strong> above.</p></section>
+    <section id="workspace-inbox" class="panel" hidden aria-labelledby="inbox-heading">
+      <div class="section-heading"><div><p class="eyebrow">WORKSPACE INBOX</p><h2 id="inbox-heading" tabindex="-1">All submissions</h2></div><button id="inbox-refresh" type="button">Refresh</button></div>
+      <p id="inbox-access" class="help" hidden>Only workspace owners and admins can review submission data.</p>
+      <form id="inbox-filters"><fieldset id="inbox-filter-fields"><div class="two-columns">
+        <label>Site<select name="siteId" id="inbox-site"><option value="">All sites</option></select></label>
+        <label>Form ID<input name="formId" id="inbox-form" autocomplete="off" placeholder="All forms, or enter a form ID"></label>
+        <label>Received from (inclusive)<input name="receivedFrom" autocomplete="off" placeholder="2026-09-29T00:00:00Z"></label>
+        <label>Received before (exclusive)<input name="receivedBefore" autocomplete="off" placeholder="2026-09-30T00:00:00Z"></label>
+        <label>Accepted schema version<input name="schemaVersion" inputmode="numeric" autocomplete="off"></label>
+        <label>Acceptance status<select name="status"><option value="">All</option><option value="accepted">Accepted</option></select></label>
+      </div><button type="submit">Apply filters</button></fieldset></form>
+      <p id="inbox-state" role="status">Open the inbox to load submissions.</p><p id="inbox-error" role="alert" tabindex="-1" hidden></p>
+      <div id="inbox-list" aria-label="Workspace submissions"></div>
+      <div class="pagination"><button id="inbox-previous" type="button" disabled>Newer submissions</button><button id="inbox-next" type="button" disabled>Older submissions</button></div>
+      <section id="inbox-detail" hidden aria-labelledby="inbox-detail-heading"><h3 id="inbox-detail-heading" tabindex="-1">Submission detail</h3><button id="inbox-open-form" type="button">Open this form</button><dl id="inbox-metadata"></dl><p id="inbox-redactions" class="help"></p><dl id="inbox-values"></dl><details><summary>Exact accepted JSON Schema</summary><pre id="inbox-schema"></pre></details></section>
+      <p class="help">This inbox reads the Go submission store. Content clears when this tab is hidden or the workspace changes. Submission content is never sent to an assistant.</p>
+    </section>
     <section id="editor-panel" hidden aria-labelledby="editor-heading">
       <div class="section-heading"><div><p id="form-status" class="eyebrow"></p><h2 id="editor-heading" tabindex="-1">New form</h2></div><div class="actions"><button id="reload-form" class="quiet" type="button" hidden>Reload server version</button></div></div>
       <p id="read-only" class="muted" hidden>Your workspace role is read-only. An owner or admin can save and publish.</p>

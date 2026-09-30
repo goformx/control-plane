@@ -57,6 +57,14 @@ machine round-trip format; CSV uses text-prefixed cells and is not guaranteed sa
 after arbitrary spreadsheet edits or re-saves. Missing recent delivery entries
 do not establish that a submission was never delivered.
 
+The workspace-level **All submissions** inbox reads the same Go records across
+forms and sites. Owners and admins can filter by site, form ID, accepted version,
+status and received time, then open the exact accepted schema snapshot. Members
+cannot load the inbox. The PHP application proxies authorized requests without
+storing a second submission copy, and the browser clears received content on
+tab hide or workspace access changes. The assistant connection does not need
+or receive submission-read scope for form creation.
+
 The editor requires a current browser supporting native JSON source access and
 `JSON.rawJSON`; startup checks this before loading the workspace. Numeric
 constraints retain their original precision, special property names remain
