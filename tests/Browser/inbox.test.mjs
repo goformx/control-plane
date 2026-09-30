@@ -52,6 +52,8 @@ test('workspace inbox combines two sites, filters by site and shows exact accept
   assert.match(await page.locator('#inbox-values').textContent(), /<img src=x onerror=alert\(1\)>/);
   assert.equal(await page.locator('#inbox-values img').count(), 0);
   assert.match(await page.locator('#inbox-redactions').textContent(), /private/);
+  assert.equal(await page.locator('#inbox-visit-site').getAttribute('href'), 'https://second.example');
+  assert.equal(await page.locator('#inbox-visit-site').getAttribute('rel'), 'noopener noreferrer');
   assert.equal(data.requests.some(request => request.path === '/api/control-plane/submissions' && request.query.includes(`siteId=${SECOND_SITE}`)), true);
   data.sites = data.sites.filter(site => site.id !== SECOND_SITE);
   await page.locator('#inbox-refresh').click();

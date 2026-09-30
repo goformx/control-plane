@@ -5,6 +5,16 @@ import { submissionFields, submissionFilters } from './submissions-app.js';
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PAGE_SIZE = 25;
 
+function safeSiteOrigin(value) {
+  try {
+    const url = new URL(value);
+    const loopback = ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname);
+    if ((url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) || url.username || url.password
+        || url.pathname !== '/' || url.search || url.hash || url.origin !== value) return null;
+    return url.origin;
+  } catch { return null; }
+}
+
 export function workspaceInboxFilters(values) {
   const filters = submissionFilters(values);
   for (const key of ['siteId', 'formId']) {
@@ -20,10 +30,11 @@ export function workspaceInboxFilters(values) {
 export function initWorkspaceInbox({ context, verifyWorkspace, openForm }) {
   const $ = id => document.getElementById(id);
   let generation = 0, controller = null, busy = false, filters = {}, cursor = '', nextCursor = '', previous = [];
-  let selected = null;
+  let selected = null, sitesByID = new Map();
   const allowed = () => ['owner', 'admin'].includes(context().role) && !context().sessionExpired;
   const clearDetail = () => {
     $('inbox-detail').hidden = true;
+    $('inbox-visit-site').hidden = true; $('inbox-visit-site').removeAttribute('href');
     $('inbox-metadata').replaceChildren(); $('inbox-values').replaceChildren();
     $('inbox-redactions').textContent = ''; $('inbox-schema').textContent = '';
   };
@@ -41,7 +52,7 @@ export function initWorkspaceInbox({ context, verifyWorkspace, openForm }) {
   }
   function reset() {
     generation++; controller?.abort(); controller = null; busy = false;
-    filters = {}; cursor = ''; nextCursor = ''; previous = []; selected = null;
+    filters = {}; cursor = ''; nextCursor = ''; previous = []; selected = null; sitesByID = new Map();
     $('inbox-list').replaceChildren(); clearDetail(); $('inbox-filters').reset();
     $('inbox-site').replaceChildren(new Option('All sites', ''));
     $('inbox-error').textContent = ''; $('inbox-error').hidden = true;
@@ -98,6 +109,7 @@ export function initWorkspaceInbox({ context, verifyWorkspace, openForm }) {
       if (offset > 10000 && offset < total) throw new Error('The site list is too large to filter safely.');
     } while (offset < total);
     const selectedSite = filters.siteId ?? '';
+    sitesByID = new Map(sites.map(site => [site.id, site]));
     $('inbox-site').replaceChildren(new Option('All sites', ''));
     for (const site of sites) $('inbox-site').add(new Option(`${site.name} · ${site.origin}`, site.id));
     if (sites.some(site => site.id === selectedSite)) $('inbox-site').value = selectedSite;
@@ -128,6 +140,9 @@ export function initWorkspaceInbox({ context, verifyWorkspace, openForm }) {
     const data = result.data;
     if (data?.id !== row.id || data.formId !== row.formId || data.schemaVersion !== row.schemaVersion) throw new Error('The accepted snapshot does not match this inbox row.');
     const fields = submissionFields(data);
+    const site = sitesByID.get(row.siteId);
+    const siteOrigin = site ? safeSiteOrigin(site.origin) : null;
+    if (siteOrigin) { $('inbox-visit-site').href = siteOrigin; $('inbox-visit-site').hidden = false; }
     for (const [label, value] of [['Form', `${row.formTitle} (${row.formName})`], ['Site ID', row.siteId ?? 'Unassigned'],
       ['Submission ID', data.id], ['Received', data.submittedAt], ['Accepted schema version', String(data.schemaVersion)],
       ['Acceptance status', data.status], ['Acceptance request ID', data.requestId]]) {

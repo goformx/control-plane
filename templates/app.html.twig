@@ -60,7 +60,7 @@
       <p id="inbox-state" role="status">Open the inbox to load submissions.</p><p id="inbox-error" role="alert" tabindex="-1" hidden></p>
       <div id="inbox-list" aria-label="Workspace submissions"></div>
       <div class="pagination"><button id="inbox-previous" type="button" disabled>Newer submissions</button><button id="inbox-next" type="button" disabled>Older submissions</button></div>
-      <section id="inbox-detail" hidden aria-labelledby="inbox-detail-heading"><h3 id="inbox-detail-heading" tabindex="-1">Submission detail</h3><button id="inbox-open-form" type="button">Open this form</button><dl id="inbox-metadata"></dl><p id="inbox-redactions" class="help"></p><dl id="inbox-values"></dl><details><summary>Exact accepted JSON Schema</summary><pre id="inbox-schema"></pre></details></section>
+      <section id="inbox-detail" hidden aria-labelledby="inbox-detail-heading"><h3 id="inbox-detail-heading" tabindex="-1">Submission detail</h3><div class="actions"><button id="inbox-open-form" type="button">Open this form</button><a id="inbox-visit-site" target="_blank" rel="noopener noreferrer" hidden>Visit site</a></div><dl id="inbox-metadata"></dl><p id="inbox-redactions" class="help"></p><dl id="inbox-values"></dl><details><summary>Exact accepted JSON Schema</summary><pre id="inbox-schema"></pre></details></section>
       <p class="help">This inbox reads the Go submission store. Content clears when this tab is hidden or the workspace changes. Submission content is never sent to an assistant.</p>
     </section>
     <section id="editor-panel" hidden aria-labelledby="editor-heading">
