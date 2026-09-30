@@ -26,6 +26,7 @@ COPY src/ ./src/
 COPY templates/ ./templates/
 COPY public/ ./public/
 COPY docker/php/entrypoint.sh /usr/local/bin/goformx-php-entrypoint
+COPY docker/php/worker-bound.conf /usr/local/etc/php-fpm.d/worker-bound.conf
 RUN composer dump-autoload --no-dev --optimize \
     && mkdir -p /app/storage \
     && chown -R www-data:www-data /app/storage \

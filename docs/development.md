@@ -42,6 +42,16 @@ The disposable smoke is `sh scripts/verify-proxy-cookie.sh` after both images
 are built. A successful image smoke does not replace capacity, mail, restore,
 migration, or rollback acceptance.
 
+The `www` FPM pool terminates a worker after 25 seconds of total request
+occupancy, including work after `fastcgi_finish_request()` and shutdown
+functions. This is a hard backstop: a request in progress can end abruptly,
+and it is not a graceful deadline for the Go API or a promise of a complete
+browser response. Nginx's 30-second FastCGI read timeout only limits idle
+reads; a slow-drip response can otherwise run indefinitely. The routed
+`sh scripts/verify-worker-bound.sh` smoke checks termination during a drip,
+recovery, and a concurrent 8 MiB response. It mounts its test script at
+runtime; no test endpoint is included in the production image.
+
 ## Production topology
 
 Cloudflare terminates public DNS. The Raspberry Pi ingress routes `goformx.com` to this Waaseyaa application and preserves `api.goformx.com` for the Go service. Application storage is a local SQLite volume included in the encrypted/offsite backup procedure. Deployments run migrations before traffic and retain the previous application artifact for rollback.

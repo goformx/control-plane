@@ -20,3 +20,5 @@ jobs:
         run: docker run --rm goformx-control-plane-production:context-probe composer check-platform-reqs --no-dev
       - name: Check routed production login and cookies
         run: sh scripts/verify-proxy-cookie.sh
+      - name: Check bounded PHP-FPM worker occupancy
+        run: sh scripts/verify-worker-bound.sh
