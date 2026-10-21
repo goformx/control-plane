@@ -116,6 +116,8 @@ final class CustodyRotationTest extends TestCase
 
         // Hold an UNUSED old assertion: its later rejection proves expiry, not replay.
         $lastOldAssertion = $this->issue($old);
+        // JWT expiry uses wall time, which can lag the monotonic drain clock.
+        $expiryDeadline = time() + self::DRAIN_SECONDS;
         $snapshot = $this->publish($next, [$this->publicKey($old, 'retiring')]);
         $this->startGo($snapshot);
         $this->expectRead($old, 200);
@@ -128,8 +130,9 @@ final class CustodyRotationTest extends TestCase
             if ((int) $elapsed % 10 === 0) {
                 $this->expectRead($next, 200);
             }
-        } while ($elapsed < self::DRAIN_SECONDS);
+        } while ($elapsed < self::DRAIN_SECONDS || (time() <= $expiryDeadline && $elapsed < 2 * self::DRAIN_SECONDS));
         self::assertGreaterThanOrEqual(self::DRAIN_SECONDS, $elapsed);
+        self::assertGreaterThan($expiryDeadline, time(), 'Wall time must pass the assertion lifetime and skew before expiry is tested.');
         self::assertSame(401, $this->request(self::API . '/v1/forms', 'GET', $lastOldAssertion)['status']);
         $this->record('unused retiring assertion expired after measured overlap', ['elapsed_seconds' => round($elapsed, 3)]);
 
@@ -214,7 +217,9 @@ final class CustodyRotationTest extends TestCase
         return json_encode($document, JSON_THROW_ON_ERROR);
     }
 
-    private function startGo(string $snapshot, bool $enabled = true, string $discovery = ''): void
+    // An empty environment value falls back to Go's live discovery URL.
+    // Keep this snapshot rehearsal pinned to its local HTTPS discovery outage.
+    private function startGo(string $snapshot, bool $enabled = true, string $discovery = 'https://127.0.0.1:18093' . self::JWKS_PATH): void
     {
         $this->stop('go');
         $this->start('go', [$this->binary], $this->runtime + [
