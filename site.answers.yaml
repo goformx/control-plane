@@ -8,7 +8,7 @@ application:
     config_key: APP_URL
 framework:
   revision_policy: exact-lock
-  observed_lock_sha256: f905edb903ce03b6b3afd0af74848e0b8d911b5d79a41943f8ff48b130a4cba0
+  observed_lock_sha256: 7cfa8d99ae51d87f1463b5f124cf1e17a4798ed03214a61780108d28b2a1dae1
 content_types:
   - id: dashboard
     canonical_route: /app
